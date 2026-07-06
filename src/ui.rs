@@ -107,6 +107,9 @@ pub fn bottom_line(app: &App) -> String {
         };
         return format!("{c}{input}");
     }
+    if matches!(app.mode, Mode::PatternMenu) {
+        return crate::patterns::menu_line();
+    }
     if let Some(msg) = &app.message {
         return msg.clone();
     }

@@ -1,5 +1,6 @@
 use crate::buffer::{Buffer, Pos};
 use crate::motion;
+use crate::patterns::{self, PatternDef};
 use crate::search::{Direction, Search};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
@@ -11,6 +12,7 @@ pub enum Mode {
         origin: Pos,
         origin_top: usize,
     },
+    PatternMenu,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -263,6 +265,42 @@ impl App {
                 self.handle_prompt(key);
                 None
             }
+            Mode::PatternMenu => {
+                self.handle_pattern_menu(key);
+                None
+            }
+        }
+    }
+
+    /// Predefined pattern search, copycat style: backward from the
+    /// cursor so `n` walks up through older output and `N` back down.
+    fn activate_pattern(&mut self, def: &PatternDef) {
+        self.search.run(&self.buf, def.regex, Direction::Backward);
+        let n = self.search.matches.len();
+        if n == 0 {
+            self.message = Some(format!("no match: {}", def.name));
+            return;
+        }
+        if let Some(m) = self.search.seek(self.cursor, Direction::Backward, true) {
+            self.goto(Pos {
+                row: m.row,
+                col: m.start,
+            });
+        }
+        self.message = Some(format!("{}: {} matches", def.name, n));
+    }
+
+    fn handle_pattern_menu(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => self.mode = Mode::Normal,
+            KeyCode::Char(c) => {
+                self.mode = Mode::Normal;
+                match patterns::by_key(c) {
+                    Some(def) => self.activate_pattern(def),
+                    None => self.message = Some(format!("no pattern: {c}")),
+                }
+            }
+            _ => {}
         }
     }
 
@@ -271,7 +309,16 @@ impl App {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let half = (self.view_rows / 2).max(1) as isize;
         let page = self.view_rows.max(1) as isize;
+        if key.modifiers.contains(KeyModifiers::ALT) {
+            if let Char(c) = key.code {
+                if let Some(def) = patterns::by_key(c) {
+                    self.activate_pattern(def);
+                }
+                return None;
+            }
+        }
         match key.code {
+            Char('p') if !ctrl => self.mode = Mode::PatternMenu,
             Char('q') if !ctrl => self.quit = true,
             Esc => {
                 if self.sel.is_some() {
@@ -578,6 +625,45 @@ mod tests {
         a.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         a.handle_key(key('n'));
         assert_eq!(a.cursor.row, 0);
+    }
+
+    fn alt(c: char) -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::ALT)
+    }
+
+    #[test]
+    fn pattern_menu_selects_url_search() {
+        let mut a = app("visit https://x.dev now\nplain tail");
+        a.handle_key(key('p'));
+        assert!(matches!(a.mode, Mode::PatternMenu));
+        a.handle_key(key('u'));
+        assert!(matches!(a.mode, Mode::Normal));
+        assert_eq!(a.cursor, Pos { row: 0, col: 6 });
+        assert_eq!(a.search.matches.len(), 1);
+    }
+
+    #[test]
+    fn pattern_menu_esc_cancels_and_unknown_key_reports() {
+        let mut a = app("text");
+        a.handle_key(key('p'));
+        a.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(matches!(a.mode, Mode::Normal));
+        assert!(!a.quit);
+        a.handle_key(key('p'));
+        a.handle_key(key('z'));
+        assert_eq!(a.message.as_deref(), Some("no pattern: z"));
+    }
+
+    #[test]
+    fn alt_key_activates_pattern_backward_and_n_walks_up() {
+        let mut a = app("num 1\nnum 2\nnum 3");
+        a.handle_key(alt('d'));
+        // Nearest match at or above the cursor (bottom row, col 0).
+        assert_eq!(a.cursor, Pos { row: 1, col: 4 });
+        a.handle_key(key('n'));
+        assert_eq!(a.cursor, Pos { row: 0, col: 4 });
+        a.handle_key(key('N'));
+        assert_eq!(a.cursor, Pos { row: 1, col: 4 });
     }
 
     #[test]
