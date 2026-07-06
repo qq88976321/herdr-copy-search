@@ -1,5 +1,6 @@
 use crate::app::{App, Mode, SelKind};
 use crate::buffer::Pos;
+use crate::extract::{ExtractApp, Granularity};
 use crate::search::Direction;
 use crossterm::cursor::{Hide, MoveTo, Show};
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
@@ -154,6 +155,15 @@ fn style(out: &mut impl Write, hl: Hl) -> io::Result<()> {
     Ok(())
 }
 
+fn truncate_to_width(mut text: String, cols: usize) -> String {
+    let mut w = 0usize;
+    text.retain(|c| {
+        w += c.width().unwrap_or(0).max(1);
+        w < cols
+    });
+    text
+}
+
 /// Draw the whole screen: content rows then the bottom line.
 pub fn draw(out: &mut impl Write, app: &App) -> io::Result<()> {
     for y in 0..app.view_rows {
@@ -172,12 +182,7 @@ pub fn draw(out: &mut impl Write, app: &App) -> io::Result<()> {
         MoveTo(0, app.view_rows as u16),
         Clear(ClearType::CurrentLine)
     )?;
-    let mut text = bottom_line(app);
-    let mut w = 0usize;
-    text.retain(|c| {
-        w += c.width().unwrap_or(0).max(1);
-        w < app.view_cols
-    });
+    let text = truncate_to_width(bottom_line(app), app.view_cols);
     queue!(out, crossterm::style::Print(&text))?;
     if matches!(app.mode, Mode::Prompt { .. }) {
         queue!(
@@ -187,6 +192,48 @@ pub fn draw(out: &mut impl Write, app: &App) -> io::Result<()> {
             SetAttribute(Attribute::Reset)
         )?;
     }
+    out.flush()
+}
+
+/// Extract-mode screen: candidate list with the best match next to the
+/// bottom prompt line, fzf style.
+pub fn draw_extract(out: &mut impl Write, app: &ExtractApp) -> io::Result<()> {
+    let window = app.window();
+    for y in 0..app.view_rows {
+        queue!(out, MoveTo(0, y as u16), Clear(ClearType::CurrentLine))?;
+        let k = app.view_rows - 1 - y;
+        if let Some(&idx) = window.get(k) {
+            let text = truncate_to_width(app.candidates()[idx].clone(), app.view_cols);
+            if k == app.window_selected() {
+                queue!(
+                    out,
+                    SetAttribute(Attribute::Reverse),
+                    crossterm::style::Print(text),
+                    SetAttribute(Attribute::Reset)
+                )?;
+            } else {
+                queue!(out, crossterm::style::Print(text))?;
+            }
+        }
+    }
+    queue!(
+        out,
+        MoveTo(0, app.view_rows as u16),
+        Clear(ClearType::CurrentLine)
+    )?;
+    let badge = match app.granularity {
+        Granularity::Word => "word",
+        Granularity::Line => "line",
+    };
+    let prompt = format!("[{badge}] {}> {}", app.filtered.len(), app.query);
+    let prompt = truncate_to_width(prompt, app.view_cols);
+    queue!(
+        out,
+        crossterm::style::Print(&prompt),
+        SetAttribute(Attribute::Reverse),
+        crossterm::style::Print(" "),
+        SetAttribute(Attribute::Reset)
+    )?;
     out.flush()
 }
 

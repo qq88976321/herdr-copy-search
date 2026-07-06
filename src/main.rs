@@ -1,6 +1,7 @@
 use crossterm::event::{self, Event, KeyEventKind};
 use herdr_copy_search::app::{App, Effect};
 use herdr_copy_search::buffer::Buffer;
+use herdr_copy_search::extract::{ExtractApp, ExtractEffect};
 use herdr_copy_search::herdr::{self, Herdr};
 use herdr_copy_search::{osc52, ui};
 use std::io::{self, IsTerminal};
@@ -8,7 +9,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 const USAGE: &str =
-    "usage: herdr-copy-search [--mode copy|search] [--pane ID] [--lines N] [--input FILE]";
+    "usage: herdr-copy-search [--mode copy|search|extract] [--pane ID] [--lines N] [--input FILE]";
 
 /// The herdr server caps pane reads at ~1000 lines (spike-verified),
 /// so asking for more only future-proofs against a raised cap.
@@ -18,6 +19,7 @@ const DEFAULT_LINES: usize = 1000;
 enum RunMode {
     Copy,
     Search,
+    Extract,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -43,6 +45,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Cli, String> {
                 cli.mode = match value("--mode")?.as_str() {
                     "copy" => RunMode::Copy,
                     "search" => RunMode::Search,
+                    "extract" => RunMode::Extract,
                     other => return Err(format!("unknown mode: {other}")),
                 }
             }
@@ -114,6 +117,58 @@ fn run(app: &mut App) -> io::Result<bool> {
     Ok(copied)
 }
 
+/// Extract loop; the resulting effect runs after the terminal is
+/// restored so errors stay visible and send-text hits a live pane.
+fn run_extract(app: &mut ExtractApp) -> io::Result<Option<ExtractEffect>> {
+    let _guard = ui::TerminalGuard::enter()?;
+    let mut out = io::BufWriter::new(io::stdout());
+    let (w, h) = crossterm::terminal::size()?;
+    app.set_size(w as usize, h as usize);
+    ui::draw_extract(&mut out, app)?;
+    while !app.quit {
+        match event::read()? {
+            Event::Key(k) if k.kind != KeyEventKind::Release => {
+                if let Some(effect) = app.handle_key(k) {
+                    return Ok(Some(effect));
+                }
+            }
+            Event::Resize(w, h) => app.set_size(w as usize, h as usize),
+            _ => {}
+        }
+        if !app.quit {
+            ui::draw_extract(&mut out, app)?;
+        }
+    }
+    Ok(None)
+}
+
+fn extract_mode(text: &str, source_pane: Option<&str>) -> io::Result<()> {
+    let mut app = ExtractApp::new(text);
+    match run_extract(&mut app)? {
+        Some(ExtractEffect::Copy(text)) => {
+            if osc52::emit(&text)? {
+                eprintln!("copied (large; terminal may truncate)");
+            }
+            std::thread::sleep(osc52::FORWARD_GRACE);
+        }
+        Some(ExtractEffect::Insert(text)) => {
+            let pane =
+                source_pane.ok_or_else(|| io::Error::other("no source pane to insert into"))?;
+            Herdr::from_env().send_text(pane, &text)?;
+        }
+        None => {}
+    }
+    Ok(())
+}
+
+fn copy_mode(text: &str, start_search: bool) -> io::Result<()> {
+    let mut app = App::new(Buffer::from_text(text), start_search);
+    if run(&mut app)? {
+        std::thread::sleep(osc52::FORWARD_GRACE);
+    }
+    Ok(())
+}
+
 fn main() -> ExitCode {
     let cli = match parse_args(std::env::args().skip(1)) {
         Ok(cli) => cli,
@@ -132,17 +187,13 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let mut app = App::new(
-        Buffer::from_text(&text),
-        matches!(cli.mode, RunMode::Search),
-    );
-    match run(&mut app) {
-        Ok(copied) => {
-            if copied {
-                std::thread::sleep(osc52::FORWARD_GRACE);
-            }
-            ExitCode::SUCCESS
-        }
+    let result = match cli.mode {
+        RunMode::Extract => extract_mode(&text, source_pane.as_deref()),
+        RunMode::Copy => copy_mode(&text, false),
+        RunMode::Search => copy_mode(&text, true),
+    };
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("herdr-copy-search: {e}");
             ExitCode::FAILURE
