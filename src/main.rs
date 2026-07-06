@@ -8,8 +8,7 @@ use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-const USAGE: &str =
-    "usage: herdr-copy-search [--mode copy|search|extract] [--pane ID] [--lines N] [--input FILE]";
+const USAGE: &str = "usage: herdr-copy-search [--mode copy|search|extract] [--pane ID] [--lines N] [--height PCT] [--input FILE]";
 
 /// The herdr server caps pane reads at ~1000 lines (spike-verified),
 /// so asking for more only future-proofs against a raised cap.
@@ -28,6 +27,8 @@ struct Cli {
     input: Option<PathBuf>,
     pane: Option<String>,
     lines: usize,
+    /// Extract popup height percent; overrides the config file.
+    height: Option<u8>,
 }
 
 fn parse_args(args: impl Iterator<Item = String>) -> Result<Cli, String> {
@@ -36,6 +37,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Cli, String> {
         input: None,
         pane: None,
         lines: DEFAULT_LINES,
+        height: None,
     };
     let mut args = args.peekable();
     while let Some(arg) = args.next() {
@@ -55,6 +57,15 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Cli, String> {
                 cli.lines = value("--lines")?
                     .parse()
                     .map_err(|_| "--lines needs a number".to_string())?
+            }
+            "--height" => {
+                let pct: u8 = value("--height")?
+                    .parse()
+                    .map_err(|_| "--height needs a number".to_string())?;
+                if !(1..=100).contains(&pct) {
+                    return Err("--height must be 1-100".to_string());
+                }
+                cli.height = Some(pct);
             }
             other => return Err(format!("unknown argument: {other}")),
         }
@@ -127,12 +138,12 @@ fn run(app: &mut App) -> io::Result<bool> {
 
 /// Extract loop; the resulting effect runs after the terminal is
 /// restored so errors stay visible and send-text hits a live pane.
-fn run_extract(app: &mut ExtractApp) -> io::Result<Option<ExtractEffect>> {
+fn run_extract(app: &mut ExtractApp, backdrop: &Buffer) -> io::Result<Option<ExtractEffect>> {
     let _guard = ui::TerminalGuard::enter()?;
     let mut out = io::BufWriter::new(io::stdout());
     let (w, h) = crossterm::terminal::size()?;
     app.set_size(w as usize, h as usize);
-    ui::draw_extract(&mut out, app)?;
+    ui::draw_extract(&mut out, app, backdrop)?;
     while !app.quit {
         match event::read()? {
             Event::Key(k) if k.kind != KeyEventKind::Release => {
@@ -144,15 +155,15 @@ fn run_extract(app: &mut ExtractApp) -> io::Result<Option<ExtractEffect>> {
             _ => {}
         }
         if !app.quit {
-            ui::draw_extract(&mut out, app)?;
+            ui::draw_extract(&mut out, app, backdrop)?;
         }
     }
     Ok(None)
 }
 
-fn extract_mode(buf: &Buffer, source_pane: Option<&str>) -> io::Result<()> {
-    let mut app = ExtractApp::new(&buf.text());
-    match run_extract(&mut app)? {
+fn extract_mode(buf: &Buffer, height: u8, source_pane: Option<&str>) -> io::Result<()> {
+    let mut app = ExtractApp::new(&buf.text(), height);
+    match run_extract(&mut app, buf)? {
         Some(ExtractEffect::Copy(text)) => {
             if osc52::emit(&text)? {
                 eprintln!("copied (large; terminal may truncate)");
@@ -195,8 +206,11 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    let height = cli.height.unwrap_or_else(|| {
+        herdr_copy_search::config::load(|k| std::env::var(k).ok()).extract_height
+    });
     let result = match cli.mode {
-        RunMode::Extract => extract_mode(&buf, source_pane.as_deref()),
+        RunMode::Extract => extract_mode(&buf, height, source_pane.as_deref()),
         RunMode::Copy => copy_mode(buf, false),
         RunMode::Search => copy_mode(buf, true),
     };

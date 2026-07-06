@@ -1,6 +1,7 @@
 pub mod ansi;
 pub mod app;
 pub mod buffer;
+pub mod config;
 pub mod extract;
 pub mod herdr;
 pub mod motion;

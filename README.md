@@ -67,6 +67,17 @@ nearest match above is selected and `n` walks up through older output.
 
 extrakto-style picker over the same scrollback: tokens (or whole lines)
 are listed newest first and filtered with a built-in fuzzy matcher.
+Like `fzf --height`, the picker occupies only the bottom of the overlay
+(default 40%); the pane content stays visible above it in its original
+colors.
+
+Popup height: pass `--height PCT` in the pane command, or set it in
+the plugin config file (path from `herdr plugin config-dir copy-search`):
+
+```toml
+# $HERDR_PLUGIN_CONFIG_DIR/config.toml
+extract_height = 40
+```
 
 | Keys | Action |
 | --- | --- |
@@ -81,14 +92,17 @@ are listed newest first and filtered with a built-in fuzzy matcher.
 ## Development
 
 ```sh
-cargo test
-cargo run -- --input fixtures/sample.txt --mode copy     # outside herdr
+just gate                                # fmt + clippy + test + release build
+just run copy                            # fixture run outside herdr
 herdr plugin pane open --plugin copy-search --entrypoint copy   # inside herdr
+just release patch                       # bump + sync manifests + local tag
 ```
 
 `--pane ID` overrides the source pane, `--lines N` the read size.
 Outside herdr you can also pipe text on stdin; key events then come
-from `/dev/tty`.
+from `/dev/tty`. Releases are local-only (`cargo-release` with
+`publish = false`, `push = false`); `herdr-plugin.toml` is version-
+synced automatically.
 
 ## Design notes
 
@@ -100,7 +114,19 @@ from `/dev/tty`.
   `HERDR_ACTIVE_PANE_ID`, then the `focused_pane_id` field of
   `HERDR_PLUGIN_CONTEXT_JSON`. `HERDR_PANE_ID` is the overlay pane
   itself and is deliberately ignored.
-- No serde: herdr's context JSON is flat, so a small string-field
-  extractor is enough.
+- Colors: buffer rows come from `pane read --source recent --format
+  ansi` (styled, wrapped at the pane width) so the overlay looks like
+  the frozen pane; a second `recent-unwrapped --format text` read
+  aligns them into soft-wrap flags so yanks rejoin wrapped long lines.
+  (`recent-unwrapped --format ansi` returns empty on herdr 0.7.1 once
+  scrollback grows, hence the two-read composition.) Known limits:
+  searches do not match across a wrap boundary, and if the pane
+  changes between the two reads the wrap joining degrades to hard
+  breaks for that snapshot.
+- The bottom row belongs to the content; prompt, pattern menu, and
+  messages overlay it temporarily, and copy-mode state lives in the
+  tmux-style top-right indicator.
+- No serde or toml crates: herdr's context JSON and the plugin config
+  are flat, so small string-field extractors are enough.
 - Extract mode follows extrakto's convention (Enter inserts, Tab
   copies); copy mode follows tmux (Enter copies and exits).

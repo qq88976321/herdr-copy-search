@@ -112,6 +112,15 @@ pub enum ExtractEffect {
     Insert(String),
 }
 
+/// Screen split for the fzf-style bottom popup: rows above the popup
+/// show the source pane as a backdrop (its last row is the separator),
+/// the popup itself is `clamp(rows * pct / 100, 3, rows)` tall with one
+/// row for the prompt. Returns (backdrop_rows, list_rows).
+pub fn popup_layout(rows: usize, pct: u8) -> (usize, usize) {
+    let popup = (rows * pct as usize / 100).max(3).min(rows.max(1));
+    (rows.saturating_sub(popup), popup.saturating_sub(1).max(1))
+}
+
 /// extrakto-style token picker: type to fuzzy-filter, Enter inserts
 /// into the source pane, Tab copies via OSC 52.
 pub struct ExtractApp {
@@ -123,13 +132,17 @@ pub struct ExtractApp {
     pub filtered: Vec<usize>,
     /// Index into `filtered`; 0 is the best match, drawn next to the prompt.
     pub selected: usize,
+    /// List rows inside the popup (excludes the prompt row).
     pub view_rows: usize,
     pub view_cols: usize,
+    /// Rows above the popup showing the pane backdrop.
+    pub backdrop_rows: usize,
+    height_pct: u8,
     pub quit: bool,
 }
 
 impl ExtractApp {
-    pub fn new(text: &str) -> Self {
+    pub fn new(text: &str, height_pct: u8) -> Self {
         let mut app = ExtractApp {
             query: String::new(),
             granularity: Granularity::Word,
@@ -139,6 +152,8 @@ impl ExtractApp {
             selected: 0,
             view_rows: 1,
             view_cols: 80,
+            backdrop_rows: 0,
+            height_pct: height_pct.clamp(1, 100),
             quit: false,
         };
         app.refilter();
@@ -147,7 +162,9 @@ impl ExtractApp {
 
     pub fn set_size(&mut self, cols: usize, rows: usize) {
         self.view_cols = cols.max(1);
-        self.view_rows = rows.saturating_sub(1).max(1);
+        let (backdrop, list) = popup_layout(rows, self.height_pct);
+        self.backdrop_rows = backdrop;
+        self.view_rows = list;
     }
 
     pub fn candidates(&self) -> &[String] {
@@ -309,8 +326,20 @@ mod tests {
     }
 
     #[test]
+    fn popup_layout_splits_forty_percent() {
+        assert_eq!(popup_layout(30, 40), (18, 11));
+    }
+
+    #[test]
+    fn popup_layout_clamps_small_and_full() {
+        assert_eq!(popup_layout(30, 100), (0, 29));
+        assert_eq!(popup_layout(30, 1), (27, 2), "minimum popup of 3 rows");
+        assert_eq!(popup_layout(2, 40), (0, 1), "tiny terminal survives");
+    }
+
+    #[test]
     fn typing_filters_and_enter_inserts_best_match() {
-        let mut a = ExtractApp::new("alpha\nbeta\ngamma");
+        let mut a = ExtractApp::new("alpha\nbeta\ngamma", 100);
         assert_eq!(a.selected_text(), Some("gamma"));
         a.handle_key(key('b'));
         a.handle_key(key('e'));
@@ -322,7 +351,7 @@ mod tests {
 
     #[test]
     fn tab_copies_selected() {
-        let mut a = ExtractApp::new("alpha\nbeta");
+        let mut a = ExtractApp::new("alpha\nbeta", 100);
         let eff = a.handle_key(code(KeyCode::Tab));
         assert_eq!(eff, Some(ExtractEffect::Copy("beta".into())));
         assert!(a.quit);
@@ -330,7 +359,7 @@ mod tests {
 
     #[test]
     fn ctrl_t_toggles_line_granularity() {
-        let mut a = ExtractApp::new("one two\nthree four");
+        let mut a = ExtractApp::new("one two\nthree four", 100);
         a.handle_key(ctrl('t'));
         assert_eq!(a.granularity, Granularity::Line);
         assert_eq!(a.selected_text(), Some("three four"));
@@ -338,7 +367,7 @@ mod tests {
 
     #[test]
     fn esc_clears_query_then_quits() {
-        let mut a = ExtractApp::new("alpha");
+        let mut a = ExtractApp::new("alpha", 100);
         a.handle_key(key('a'));
         a.handle_key(code(KeyCode::Esc));
         assert_eq!(a.query, "");
@@ -349,7 +378,7 @@ mod tests {
 
     #[test]
     fn selection_moves_within_bounds_and_window_follows() {
-        let mut a = ExtractApp::new("one\ntwo\nthree\nfour");
+        let mut a = ExtractApp::new("one\ntwo\nthree\nfour", 100);
         a.set_size(80, 3); // 2 content rows
         assert_eq!(a.filtered.len(), 4);
         a.handle_key(code(KeyCode::Up));

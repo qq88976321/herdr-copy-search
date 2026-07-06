@@ -293,12 +293,41 @@ pub fn draw(out: &mut impl Write, app: &App) -> io::Result<()> {
     out.flush()
 }
 
-/// Extract-mode screen: candidate list with the best match next to the
-/// bottom prompt line, fzf style.
-pub fn draw_extract(out: &mut impl Write, app: &ExtractApp) -> io::Result<()> {
+/// Extract-mode screen, fzf --height style: the source pane shows
+/// through above (styled backdrop, tail-aligned, ending in a dim
+/// separator rule), the candidate list fills the bottom popup with the
+/// best match next to the prompt line.
+pub fn draw_extract(out: &mut impl Write, app: &ExtractApp, backdrop: &Buffer) -> io::Result<()> {
+    if app.backdrop_rows > 0 {
+        let content_rows = app.backdrop_rows - 1;
+        let start = backdrop.lines.len().saturating_sub(content_rows);
+        for y in 0..content_rows {
+            queue!(out, MoveTo(0, y as u16), Clear(ClearType::CurrentLine))?;
+            let row = start + y;
+            if row < backdrop.lines.len() {
+                for (style, text) in clip_spans(buffer_row_spans(backdrop, row), 0, app.view_cols) {
+                    apply_source_style(out, style)?;
+                    queue!(out, crossterm::style::Print(text), ResetColor)?;
+                    queue!(out, SetAttribute(Attribute::Reset))?;
+                }
+            }
+        }
+        queue!(
+            out,
+            MoveTo(0, (app.backdrop_rows - 1) as u16),
+            Clear(ClearType::CurrentLine),
+            SetAttribute(Attribute::Dim),
+            crossterm::style::Print("\u{2500}".repeat(app.view_cols)),
+            SetAttribute(Attribute::Reset)
+        )?;
+    }
     let window = app.window();
     for y in 0..app.view_rows {
-        queue!(out, MoveTo(0, y as u16), Clear(ClearType::CurrentLine))?;
+        queue!(
+            out,
+            MoveTo(0, (app.backdrop_rows + y) as u16),
+            Clear(ClearType::CurrentLine)
+        )?;
         let k = app.view_rows - 1 - y;
         if let Some(&idx) = window.get(k) {
             let text = truncate_to_width(app.candidates()[idx].clone(), app.view_cols);
@@ -316,7 +345,7 @@ pub fn draw_extract(out: &mut impl Write, app: &ExtractApp) -> io::Result<()> {
     }
     queue!(
         out,
-        MoveTo(0, app.view_rows as u16),
+        MoveTo(0, (app.backdrop_rows + app.view_rows) as u16),
         Clear(ClearType::CurrentLine)
     )?;
     let badge = match app.granularity {
