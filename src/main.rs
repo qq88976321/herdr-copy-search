@@ -1,12 +1,18 @@
 use crossterm::event::{self, Event, KeyEventKind};
 use herdr_copy_search::app::{App, Effect};
 use herdr_copy_search::buffer::Buffer;
+use herdr_copy_search::herdr::{self, Herdr};
 use herdr_copy_search::{osc52, ui};
 use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-const USAGE: &str = "usage: herdr-copy-search [--mode copy|search] [--input FILE]";
+const USAGE: &str =
+    "usage: herdr-copy-search [--mode copy|search] [--pane ID] [--lines N] [--input FILE]";
+
+/// The herdr server caps pane reads at ~1000 lines (spike-verified),
+/// so asking for more only future-proofs against a raised cap.
+const DEFAULT_LINES: usize = 1000;
 
 #[derive(Debug, PartialEq, Eq)]
 enum RunMode {
@@ -18,12 +24,16 @@ enum RunMode {
 struct Cli {
     mode: RunMode,
     input: Option<PathBuf>,
+    pane: Option<String>,
+    lines: usize,
 }
 
 fn parse_args(args: impl Iterator<Item = String>) -> Result<Cli, String> {
     let mut cli = Cli {
         mode: RunMode::Copy,
         input: None,
+        pane: None,
+        lines: DEFAULT_LINES,
     };
     let mut args = args.peekable();
     while let Some(arg) = args.next() {
@@ -37,22 +47,33 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Cli, String> {
                 }
             }
             "--input" => cli.input = Some(PathBuf::from(value("--input")?)),
+            "--pane" => cli.pane = Some(value("--pane")?),
+            "--lines" => {
+                cli.lines = value("--lines")?
+                    .parse()
+                    .map_err(|_| "--lines needs a number".to_string())?
+            }
             other => return Err(format!("unknown argument: {other}")),
         }
     }
     Ok(cli)
 }
 
-fn acquire_input(cli: &Cli) -> io::Result<String> {
+/// Input order: explicit file, then a herdr source pane, then piped
+/// stdin (dev use; crossterm reads events from /dev/tty instead).
+fn acquire_input(cli: &Cli, source_pane: Option<&str>) -> io::Result<String> {
     if let Some(path) = &cli.input {
         return std::fs::read_to_string(path);
+    }
+    if let Some(pane) = source_pane {
+        return Herdr::from_env().pane_read(pane, cli.lines);
     }
     let stdin = io::stdin();
     if !stdin.is_terminal() {
         return io::read_to_string(stdin);
     }
     Err(io::Error::other(
-        "no input: pass --input FILE or pipe text on stdin",
+        "no input: pass --input FILE, run inside herdr, or pipe text on stdin",
     ))
 }
 
@@ -101,7 +122,10 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let text = match acquire_input(&cli) {
+    let source_pane = herdr::resolve_source_pane(cli.pane.as_deref(), |k| {
+        std::env::var(k).ok().filter(|v| !v.is_empty())
+    });
+    let text = match acquire_input(&cli, source_pane.as_deref()) {
         Ok(text) => text,
         Err(e) => {
             eprintln!("herdr-copy-search: {e}\n{USAGE}");
@@ -139,6 +163,8 @@ mod tests {
         let cli = parse(&[]).unwrap();
         assert_eq!(cli.mode, RunMode::Copy);
         assert_eq!(cli.input, None);
+        assert_eq!(cli.pane, None);
+        assert_eq!(cli.lines, DEFAULT_LINES);
     }
 
     #[test]
@@ -149,9 +175,17 @@ mod tests {
     }
 
     #[test]
+    fn parses_pane_and_lines() {
+        let cli = parse(&["--pane", "w8:p1", "--lines", "500"]).unwrap();
+        assert_eq!(cli.pane.as_deref(), Some("w8:p1"));
+        assert_eq!(cli.lines, 500);
+    }
+
+    #[test]
     fn rejects_unknown_arguments_and_modes() {
         assert!(parse(&["--bogus"]).is_err());
         assert!(parse(&["--mode", "bogus"]).is_err());
         assert!(parse(&["--mode"]).is_err());
+        assert!(parse(&["--lines", "abc"]).is_err());
     }
 }
