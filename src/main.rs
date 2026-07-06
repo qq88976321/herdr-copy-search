@@ -64,16 +64,24 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Cli, String> {
 
 /// Input order: explicit file, then a herdr source pane, then piped
 /// stdin (dev use; crossterm reads events from /dev/tty instead).
-fn acquire_input(cli: &Cli, source_pane: Option<&str>) -> io::Result<String> {
+/// The herdr path reads twice: logical text for search/yank/tokens and
+/// styled wrapped rows for display, composed by Buffer::from_reads.
+fn acquire_buffer(cli: &Cli, source_pane: Option<&str>) -> io::Result<Buffer> {
     if let Some(path) = &cli.input {
-        return std::fs::read_to_string(path);
+        return Ok(Buffer::from_ansi(&std::fs::read_to_string(path)?));
     }
     if let Some(pane) = source_pane {
-        return Herdr::from_env().pane_read(pane, cli.lines);
+        let herdr = Herdr::from_env();
+        let unwrapped = herdr.pane_read(pane, cli.lines)?;
+        let wrapped_ansi = herdr.pane_read_ansi(pane, cli.lines).unwrap_or_default();
+        if wrapped_ansi.trim().is_empty() {
+            return Ok(Buffer::from_text(&unwrapped));
+        }
+        return Ok(Buffer::from_reads(&unwrapped, &wrapped_ansi));
     }
     let stdin = io::stdin();
     if !stdin.is_terminal() {
-        return io::read_to_string(stdin);
+        return Ok(Buffer::from_ansi(&io::read_to_string(stdin)?));
     }
     Err(io::Error::other(
         "no input: pass --input FILE, run inside herdr, or pipe text on stdin",
@@ -142,8 +150,8 @@ fn run_extract(app: &mut ExtractApp) -> io::Result<Option<ExtractEffect>> {
     Ok(None)
 }
 
-fn extract_mode(text: &str, source_pane: Option<&str>) -> io::Result<()> {
-    let mut app = ExtractApp::new(text);
+fn extract_mode(buf: &Buffer, source_pane: Option<&str>) -> io::Result<()> {
+    let mut app = ExtractApp::new(&buf.text());
     match run_extract(&mut app)? {
         Some(ExtractEffect::Copy(text)) => {
             if osc52::emit(&text)? {
@@ -161,8 +169,8 @@ fn extract_mode(text: &str, source_pane: Option<&str>) -> io::Result<()> {
     Ok(())
 }
 
-fn copy_mode(text: &str, start_search: bool) -> io::Result<()> {
-    let mut app = App::new(Buffer::from_text(text), start_search);
+fn copy_mode(buf: Buffer, start_search: bool) -> io::Result<()> {
+    let mut app = App::new(buf, start_search);
     if run(&mut app)? {
         std::thread::sleep(osc52::FORWARD_GRACE);
     }
@@ -180,17 +188,17 @@ fn main() -> ExitCode {
     let source_pane = herdr::resolve_source_pane(cli.pane.as_deref(), |k| {
         std::env::var(k).ok().filter(|v| !v.is_empty())
     });
-    let text = match acquire_input(&cli, source_pane.as_deref()) {
-        Ok(text) => text,
+    let buf = match acquire_buffer(&cli, source_pane.as_deref()) {
+        Ok(buf) => buf,
         Err(e) => {
             eprintln!("herdr-copy-search: {e}\n{USAGE}");
             return ExitCode::FAILURE;
         }
     };
     let result = match cli.mode {
-        RunMode::Extract => extract_mode(&text, source_pane.as_deref()),
-        RunMode::Copy => copy_mode(&text, false),
-        RunMode::Search => copy_mode(&text, true),
+        RunMode::Extract => extract_mode(&buf, source_pane.as_deref()),
+        RunMode::Copy => copy_mode(buf, false),
+        RunMode::Search => copy_mode(buf, true),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

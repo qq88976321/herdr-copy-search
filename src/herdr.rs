@@ -15,20 +15,18 @@ impl Herdr {
         Herdr { bin }
     }
 
-    /// Unwrapped recent scrollback of a pane as plain text. The herdr
-    /// server caps this at ~1000 lines regardless of `lines`.
-    pub fn pane_read(&self, pane: &str, lines: usize) -> io::Result<String> {
+    fn read(&self, pane: &str, lines: usize, source: &str, format: &str) -> io::Result<String> {
         let out = Command::new(&self.bin)
             .args([
                 "pane",
                 "read",
                 pane,
                 "--source",
-                "recent-unwrapped",
+                source,
                 "--lines",
                 &lines.to_string(),
                 "--format",
-                "text",
+                format,
             ])
             .output()?;
         if !out.status.success() {
@@ -38,6 +36,19 @@ impl Herdr {
             )));
         }
         String::from_utf8(out.stdout).map_err(io::Error::other)
+    }
+
+    /// Unwrapped recent scrollback as plain text (logical lines). The
+    /// herdr server caps this at ~1000 lines regardless of `lines`.
+    pub fn pane_read(&self, pane: &str, lines: usize) -> io::Result<String> {
+        self.read(pane, lines, "recent-unwrapped", "text")
+    }
+
+    /// Recent scrollback as SGR-styled rows wrapped at the pane width.
+    /// (recent-unwrapped + ansi is unreliable server-side: it returns
+    /// empty once the scrollback grows, so styled reads use `recent`.)
+    pub fn pane_read_ansi(&self, pane: &str, lines: usize) -> io::Result<String> {
+        self.read(pane, lines, "recent", "ansi")
     }
 
     /// Type `text` into a pane, as if entered at its terminal.

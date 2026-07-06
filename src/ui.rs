@@ -1,5 +1,6 @@
+use crate::ansi;
 use crate::app::{App, Mode, SelKind};
-use crate::buffer::Pos;
+use crate::buffer::{Buffer, Pos};
 use crate::extract::{ExtractApp, Granularity};
 use crate::search::Direction;
 use crossterm::cursor::{Hide, MoveTo, Show};
@@ -44,25 +45,57 @@ fn hl_at(app: &App, row: usize, col: usize, sel: Option<(usize, usize)>) -> Hl {
     Hl::None
 }
 
-fn push_char(spans: &mut Vec<(Hl, String)>, hl: Hl, c: char) {
+/// Merge key for rendered spans: the highlight class plus, for
+/// unhighlighted cells, the source pane style. Highlights normalize the
+/// style to default so one highlight run stays one span across source
+/// color changes and fully overrides source styling (tmux mode-style).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SpanAttrs {
+    pub hl: Hl,
+    pub style: ansi::Style,
+}
+
+fn push_char<K: Copy + PartialEq>(spans: &mut Vec<(K, String)>, key: K, c: char) {
     match spans.last_mut() {
-        Some((h, s)) if *h == hl => s.push(c),
-        _ => spans.push((hl, c.to_string())),
+        Some((k, s)) if *k == key => s.push(c),
+        _ => spans.push((key, c.to_string())),
     }
 }
 
 /// Per-row spans in char space, merging selection, search matches, the
-/// current match, and the cursor cell. The cursor gets a virtual space
-/// cell when it sits past the end of the line (empty lines).
-pub fn row_spans(app: &App, row: usize) -> Vec<(Hl, String)> {
+/// current match, the cursor cell, and the source style. The cursor
+/// gets a virtual space cell when it sits past the end of the line.
+pub fn row_spans(app: &App, row: usize) -> Vec<(SpanAttrs, String)> {
     let line = app.buf.line(row);
     let sel = app.sel_range(row);
     let mut spans = Vec::new();
     for (col, &c) in line.chars.iter().enumerate() {
-        push_char(&mut spans, hl_at(app, row, col, sel), c);
+        let hl = hl_at(app, row, col, sel);
+        let style = if hl == Hl::None {
+            line.style_at(col)
+        } else {
+            ansi::Style::default()
+        };
+        push_char(&mut spans, SpanAttrs { hl, style }, c);
     }
     if row == app.cursor.row && app.cursor.col >= line.len() {
-        spans.push((Hl::Cursor, " ".into()));
+        spans.push((
+            SpanAttrs {
+                hl: Hl::Cursor,
+                style: ansi::Style::default(),
+            },
+            " ".into(),
+        ));
+    }
+    spans
+}
+
+/// Raw buffer row merged by source style only (extract backdrop).
+pub fn buffer_row_spans(buf: &Buffer, row: usize) -> Vec<(ansi::Style, String)> {
+    let line = buf.line(row);
+    let mut spans = Vec::new();
+    for (col, &c) in line.chars.iter().enumerate() {
+        push_char(&mut spans, line.style_at(col), c);
     }
     spans
 }
@@ -70,11 +103,15 @@ pub fn row_spans(app: &App, row: usize) -> Vec<(Hl, String)> {
 /// Clip spans to the viewport [hoff, hoff + view_cols) in display cells.
 /// A wide char straddling the left edge renders as a space; a char that
 /// would cross the right edge is dropped.
-pub fn clip_spans(spans: Vec<(Hl, String)>, hoff: usize, view_cols: usize) -> Vec<(Hl, String)> {
+pub fn clip_spans<K: Copy + PartialEq>(
+    spans: Vec<(K, String)>,
+    hoff: usize,
+    view_cols: usize,
+) -> Vec<(K, String)> {
     let end = hoff + view_cols;
     let mut out = Vec::new();
     let mut x = 0usize;
-    for (hl, text) in spans {
+    for (key, text) in spans {
         for c in text.chars() {
             let w = c.width().unwrap_or(0).max(1);
             if x + w <= hoff {
@@ -85,9 +122,9 @@ pub fn clip_spans(spans: Vec<(Hl, String)>, hoff: usize, view_cols: usize) -> Ve
                 return out;
             }
             if x < hoff {
-                push_char(&mut out, hl, ' ');
+                push_char(&mut out, key, ' ');
             } else {
-                push_char(&mut out, hl, c);
+                push_char(&mut out, key, c);
             }
             x += w;
         }
@@ -132,9 +169,38 @@ pub fn bottom_line(app: &App) -> String {
     out
 }
 
-fn style(out: &mut impl Write, hl: Hl) -> io::Result<()> {
-    match hl {
-        Hl::None => {}
+fn term_color(c: ansi::Color) -> Option<Color> {
+    match c {
+        ansi::Color::Default => None,
+        ansi::Color::Indexed(n) => Some(Color::AnsiValue(n)),
+        ansi::Color::Rgb(r, g, b) => Some(Color::Rgb { r, g, b }),
+    }
+}
+
+fn apply_source_style(out: &mut impl Write, s: ansi::Style) -> io::Result<()> {
+    if let Some(c) = term_color(s.fg) {
+        queue!(out, SetForegroundColor(c))?;
+    }
+    if let Some(c) = term_color(s.bg) {
+        queue!(out, SetBackgroundColor(c))?;
+    }
+    for (on, attr) in [
+        (s.bold, Attribute::Bold),
+        (s.dim, Attribute::Dim),
+        (s.italic, Attribute::Italic),
+        (s.underline, Attribute::Underlined),
+        (s.reverse, Attribute::Reverse),
+    ] {
+        if on {
+            queue!(out, SetAttribute(attr))?;
+        }
+    }
+    Ok(())
+}
+
+fn apply_attrs(out: &mut impl Write, a: SpanAttrs) -> io::Result<()> {
+    match a.hl {
+        Hl::None => apply_source_style(out, a.style)?,
         Hl::Match => queue!(
             out,
             SetForegroundColor(Color::Black),
@@ -170,8 +236,8 @@ pub fn draw(out: &mut impl Write, app: &App) -> io::Result<()> {
         queue!(out, MoveTo(0, y as u16), Clear(ClearType::CurrentLine))?;
         let row = app.top + y;
         if row <= app.buf.last_row() {
-            for (hl, text) in clip_spans(row_spans(app, row), app.hoff, app.view_cols) {
-                style(out, hl)?;
+            for (attrs, text) in clip_spans(row_spans(app, row), app.hoff, app.view_cols) {
+                apply_attrs(out, attrs)?;
                 queue!(out, crossterm::style::Print(text), ResetColor)?;
                 queue!(out, SetAttribute(Attribute::Reset))?;
             }
@@ -297,13 +363,17 @@ mod tests {
         a
     }
 
+    /// Project styled spans down to their highlight class.
+    fn hls(spans: Vec<(SpanAttrs, String)>) -> Vec<(Hl, String)> {
+        spans.into_iter().map(|(a, s)| (a.hl, s)).collect()
+    }
+
     #[test]
     fn spans_mark_current_match_and_other_matches() {
         // Search opened from the bottom wraps to row 0 as current.
         let a = searched("foo bar foo", "foo");
-        let spans = row_spans(&a, 0);
         assert_eq!(
-            spans,
+            hls(row_spans(&a, 0)),
             vec![
                 (Hl::Cursor, "f".into()),
                 (Hl::CurrentMatch, "oo".into()),
@@ -321,9 +391,8 @@ mod tests {
             a.handle_key(key('l'));
         }
         // Selection covers cols 4..=6 ("bar"), cursor at col 6.
-        let spans = row_spans(&a, 0);
         assert_eq!(
-            spans,
+            hls(row_spans(&a, 0)),
             vec![
                 (Hl::None, "foo ".into()),
                 (Hl::Sel, "ba".into()),
@@ -338,8 +407,51 @@ mod tests {
         let mut a = app("foo\n\nbar");
         a.handle_key(key('g'));
         a.handle_key(key('j'));
-        let spans = row_spans(&a, 1);
-        assert_eq!(spans, vec![(Hl::Cursor, " ".into())]);
+        assert_eq!(hls(row_spans(&a, 1)), vec![(Hl::Cursor, " ".into())]);
+    }
+
+    fn styled_app(ansi_text: &str) -> App {
+        let mut a = App::new(Buffer::from_ansi(ansi_text), false);
+        a.set_size(80, 11);
+        a
+    }
+
+    #[test]
+    fn spans_split_on_source_style_change() {
+        // Cursor starts at col 0 and masks 'r'; the rest of the red run
+        // keeps its source style, then the default-styled tail follows.
+        let a = styled_app("\x1b[31mred\x1b[0m plain");
+        let spans = row_spans(&a, 0);
+        assert_eq!(spans[0].0.hl, Hl::Cursor);
+        assert_eq!(spans[1].1, "ed");
+        assert_eq!(spans[1].0.style.fg, ansi::Color::Indexed(1));
+        assert_eq!(spans[2].1, " plain");
+        assert_eq!(spans[2].0.style, ansi::Style::default());
+    }
+
+    #[test]
+    fn highlight_merges_across_source_colors() {
+        // "ab" spans two source colors; a search match must stay one span.
+        let mut a = styled_app("\x1b[31ma\x1b[32mb\x1b[0m tail");
+        a.handle_key(key('/'));
+        a.handle_key(key('a'));
+        a.handle_key(key('b'));
+        a.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        let spans = row_spans(&a, 0);
+        // Cursor covers 'a'; 'b' continues the current match.
+        assert_eq!(hls(spans.clone())[0], (Hl::Cursor, "a".into()));
+        assert_eq!(hls(spans)[1], (Hl::CurrentMatch, "b".into()));
+    }
+
+    #[test]
+    fn buffer_row_spans_merge_by_style() {
+        let b = Buffer::from_ansi("\x1b[31mab\x1b[0mcd");
+        let spans = buffer_row_spans(&b, 0);
+        assert_eq!(spans.len(), 2);
+        assert_eq!(spans[0].1, "ab");
+        assert_eq!(spans[0].0.fg, ansi::Color::Indexed(1));
+        assert_eq!(spans[1].1, "cd");
+        assert_eq!(spans[1].0, ansi::Style::default());
     }
 
     #[test]
