@@ -43,6 +43,16 @@ impl Line {
             .sum()
     }
 
+    /// Display cell width of the char at `col`, at least 1 so the cursor
+    /// always occupies a cell (also past end of line).
+    pub fn cell_width(&self, col: usize) -> usize {
+        self.chars
+            .get(col)
+            .and_then(|c| c.width())
+            .unwrap_or(1)
+            .max(1)
+    }
+
     /// Char index whose display cell range contains column x (with the
     /// given horizontal offset already subtracted by the caller).
     pub fn col_at_x(&self, x: usize) -> usize {

@@ -107,6 +107,21 @@ impl App {
         if self.top > self.max_top() {
             self.top = self.max_top();
         }
+        self.ensure_visible_h();
+    }
+
+    /// Horizontal follow in display cells: the cursor's whole cell range
+    /// must stay inside [hoff, hoff + view_cols).
+    fn ensure_visible_h(&mut self) {
+        let line = self.buf.line(self.cursor.row);
+        let x = line.width_before(self.cursor.col);
+        let cw = line.cell_width(self.cursor.col);
+        if x < self.hoff {
+            self.hoff = x;
+        }
+        if x + cw > self.hoff + self.view_cols {
+            self.hoff = x + cw - self.view_cols;
+        }
     }
 
     /// Wheel scrolling moves the view and drags the cursor along.
@@ -120,6 +135,7 @@ impl App {
             row,
             col: self.want_col.min(self.buf.max_col(row)),
         };
+        self.ensure_visible_h();
     }
 
     fn move_vertical(&mut self, delta: isize) {
@@ -562,6 +578,26 @@ mod tests {
         a.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         a.handle_key(key('n'));
         assert_eq!(a.cursor.row, 0);
+    }
+
+    #[test]
+    fn horizontal_scroll_follows_cursor() {
+        let long = "x".repeat(100);
+        let mut a = app(&long);
+        a.handle_key(key('$'));
+        // Cursor cell 99 must be inside [hoff, hoff + 80).
+        assert_eq!(a.hoff, 20);
+        a.handle_key(key('0'));
+        assert_eq!(a.hoff, 0);
+    }
+
+    #[test]
+    fn horizontal_scroll_keeps_wide_cursor_fully_visible() {
+        let wide = "\u{4e2d}".repeat(50);
+        let mut a = app(&wide);
+        a.handle_key(key('$'));
+        // The cursor char occupies display cells [98, 100).
+        assert_eq!(a.hoff, 20);
     }
 
     #[test]
