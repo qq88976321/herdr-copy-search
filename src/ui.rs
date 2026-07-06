@@ -132,9 +132,11 @@ pub fn clip_spans<K: Copy + PartialEq>(
     out
 }
 
-/// Content of the bottom line: prompt while searching, else a message
-/// override, else the status summary.
-pub fn bottom_line(app: &App) -> String {
+/// Transient bottom-row overlay: Some while a prompt, the pattern
+/// menu, or a message is showing; None otherwise so the content keeps
+/// the row (tmux behavior). Committed searches do not hold the row;
+/// their summary lives in the top-right indicator.
+pub fn bottom_overlay(app: &App) -> Option<String> {
     if let Mode::Prompt {
         direction, input, ..
     } = &app.mode
@@ -143,29 +145,43 @@ pub fn bottom_line(app: &App) -> String {
             Direction::Forward => '/',
             Direction::Backward => '?',
         };
-        return format!("{c}{input}");
+        return Some(format!("{c}{input}"));
     }
     if matches!(app.mode, Mode::PatternMenu) {
-        return crate::patterns::menu_line();
+        return Some(crate::patterns::menu_line());
     }
-    if let Some(msg) = &app.message {
-        return msg.clone();
+    app.message.clone()
+}
+
+/// Always-on top-right indicator, tmux mode-style: selection state,
+/// the active search summary, and the cursor position.
+pub fn indicator(app: &App) -> String {
+    let mut out = String::new();
+    match app.sel {
+        Some((SelKind::Char, _)) => out.push_str("VISUAL "),
+        Some((SelKind::Line, _)) => out.push_str("VISUAL LINE "),
+        None => {}
     }
-    let mode = match app.sel {
-        Some((SelKind::Char, _)) => "-- VISUAL --",
-        Some((SelKind::Line, _)) => "-- VISUAL LINE --",
-        None => "-- COPY --",
-    };
-    let mut out = mode.to_string();
     if !app.search.pattern.is_empty() {
-        out.push_str(&format!("  /{}", app.search.pattern));
         match app.search.current {
-            Some(i) => out.push_str(&format!("  [{}/{}]", i + 1, app.search.matches.len())),
-            None => out.push_str(&format!("  [{}]", app.search.matches.len())),
+            Some(i) => out.push_str(&format!(
+                "/{} [{}/{}] ",
+                app.search.pattern,
+                i + 1,
+                app.search.matches.len()
+            )),
+            None => out.push_str(&format!(
+                "/{} [{}] ",
+                app.search.pattern,
+                app.search.matches.len()
+            )),
         }
     }
-    let pct = (app.cursor.row + 1) * 100 / (app.buf.last_row() + 1);
-    out.push_str(&format!("  {pct}%"));
+    out.push_str(&format!(
+        "[{}/{}]",
+        app.cursor.row + 1,
+        app.buf.last_row() + 1
+    ));
     out
 }
 
@@ -243,20 +259,36 @@ pub fn draw(out: &mut impl Write, app: &App) -> io::Result<()> {
             }
         }
     }
-    queue!(
-        out,
-        MoveTo(0, app.view_rows as u16),
-        Clear(ClearType::CurrentLine)
-    )?;
-    let text = truncate_to_width(bottom_line(app), app.view_cols);
-    queue!(out, crossterm::style::Print(&text))?;
-    if matches!(app.mode, Mode::Prompt { .. }) {
+    // Top-right position indicator, over the first content row.
+    let ind = truncate_to_width(indicator(app), app.view_cols.saturating_sub(1));
+    let w = ind.chars().count() + 1; // leading pad masks a cut wide char
+    if w <= app.view_cols {
         queue!(
             out,
-            SetAttribute(Attribute::Reverse),
-            crossterm::style::Print(" "),
-            SetAttribute(Attribute::Reset)
+            MoveTo((app.view_cols - w) as u16, 0),
+            SetForegroundColor(Color::Black),
+            SetBackgroundColor(Color::Yellow),
+            crossterm::style::Print(format!(" {ind}")),
+            ResetColor
         )?;
+    }
+    // Transient bottom overlay (prompt, pattern menu, message).
+    if let Some(text) = bottom_overlay(app) {
+        queue!(
+            out,
+            MoveTo(0, (app.view_rows - 1) as u16),
+            Clear(ClearType::CurrentLine)
+        )?;
+        let text = truncate_to_width(text, app.view_cols);
+        queue!(out, crossterm::style::Print(&text))?;
+        if matches!(app.mode, Mode::Prompt { .. }) {
+            queue!(
+                out,
+                SetAttribute(Attribute::Reverse),
+                crossterm::style::Print(" "),
+                SetAttribute(Attribute::Reset)
+            )?;
+        }
     }
     out.flush()
 }
@@ -473,19 +505,30 @@ mod tests {
     }
 
     #[test]
-    fn bottom_line_shows_prompt_then_status() {
+    fn overlay_shows_prompt_then_yields_row_back() {
         let mut a = app("foo bar");
         a.handle_key(key('/'));
         a.handle_key(key('b'));
-        assert_eq!(bottom_line(&a), "/b");
+        assert_eq!(bottom_overlay(&a).as_deref(), Some("/b"));
         a.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-        assert_eq!(bottom_line(&a), "-- COPY --  /b  [1/1]  100%");
+        assert_eq!(bottom_overlay(&a), None);
+        assert_eq!(indicator(&a), "/b [1/1] [1/1]");
     }
 
     #[test]
-    fn bottom_line_message_overrides_status() {
+    fn overlay_shows_messages_and_menu() {
         let mut a = app("foo");
         a.handle_key(key('n'));
-        assert_eq!(bottom_line(&a), "no previous search");
+        assert_eq!(bottom_overlay(&a).as_deref(), Some("no previous search"));
+        a.handle_key(key('p'));
+        assert!(bottom_overlay(&a).unwrap().starts_with("pattern:"));
+    }
+
+    #[test]
+    fn indicator_reflects_selection_and_position() {
+        let mut a = app("one\ntwo\nthree");
+        assert_eq!(indicator(&a), "[3/3]");
+        a.handle_key(key('V'));
+        assert_eq!(indicator(&a), "VISUAL LINE [3/3]");
     }
 }

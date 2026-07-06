@@ -79,10 +79,12 @@ impl App {
         }
     }
 
-    /// Called by the UI before each draw with the terminal size.
+    /// Called by the UI before each draw with the terminal size. The
+    /// content owns every row; the bottom row is only overlaid while a
+    /// prompt, menu, or message is showing (tmux-style seamless view).
     pub fn set_size(&mut self, cols: usize, rows: usize) {
         self.view_cols = cols.max(1);
-        self.view_rows = rows.saturating_sub(1).max(1);
+        self.view_rows = rows.max(1);
         if self.pending_bottom {
             self.pending_bottom = false;
             self.top = self.buf.last_row().saturating_sub(self.view_rows - 1);
@@ -93,18 +95,30 @@ impl App {
         self.ensure_visible();
     }
 
+    /// While the bottom row is overlaid by the prompt or pattern menu,
+    /// it does not count as visible content, so incremental search hits
+    /// are never scrolled underneath the overlay.
+    fn reserved_bottom(&self) -> usize {
+        matches!(self.mode, Mode::Prompt { .. } | Mode::PatternMenu) as usize
+    }
+
+    fn content_rows(&self) -> usize {
+        (self.view_rows - self.reserved_bottom()).max(1)
+    }
+
     fn max_top(&self) -> usize {
         self.buf
             .last_row()
-            .saturating_sub(self.view_rows.saturating_sub(1))
+            .saturating_sub(self.content_rows().saturating_sub(1))
     }
 
     fn ensure_visible(&mut self) {
+        let rows = self.content_rows();
         if self.cursor.row < self.top {
             self.top = self.cursor.row;
         }
-        if self.cursor.row >= self.top + self.view_rows {
-            self.top = self.cursor.row + 1 - self.view_rows;
+        if self.cursor.row >= self.top + rows {
+            self.top = self.cursor.row + 1 - rows;
         }
         if self.top > self.max_top() {
             self.top = self.max_top();
@@ -456,10 +470,7 @@ impl App {
                 }
                 return;
             }
-            Char('u') if ctrl => {
-                input.clear();
-                self.incremental(&input, direction, origin, origin_top);
-            }
+            Char('u') if ctrl => input.clear(),
             Backspace => {
                 if input.is_empty() {
                     self.cursor = origin;
@@ -470,20 +481,28 @@ impl App {
                     return;
                 }
                 input.pop();
-                self.incremental(&input, direction, origin, origin_top);
             }
-            Char(c) if !ctrl => {
-                input.push(c);
-                self.incremental(&input, direction, origin, origin_top);
+            Char(c) if !ctrl => input.push(c),
+            _ => {
+                self.mode = Mode::Prompt {
+                    direction,
+                    input,
+                    origin,
+                    origin_top,
+                };
+                return;
             }
-            _ => {}
         }
+        // Restore the prompt before jumping so the reserved bottom row
+        // is accounted for while scrolling to the incremental hit.
+        let query = input.clone();
         self.mode = Mode::Prompt {
             direction,
             input,
             origin,
             origin_top,
         };
+        self.incremental(&query, direction, origin, origin_top);
     }
 
     pub fn handle_mouse(&mut self, ev: MouseEvent) {
@@ -664,6 +683,30 @@ mod tests {
         assert_eq!(a.cursor, Pos { row: 0, col: 4 });
         a.handle_key(key('N'));
         assert_eq!(a.cursor, Pos { row: 1, col: 4 });
+    }
+
+    #[test]
+    fn view_uses_all_rows() {
+        let text = (0..30).map(|i| format!("l{i}\n")).collect::<String>();
+        let mut a = App::new(Buffer::from_text(&text), false);
+        a.set_size(80, 10);
+        assert_eq!(a.view_rows, 10);
+        assert_eq!(a.top, 20, "bottom row is content, not chrome");
+    }
+
+    #[test]
+    fn prompt_reserves_bottom_row_for_matches() {
+        let text = (0..30).map(|i| format!("l{i}\n")).collect::<String>();
+        let mut a = App::new(Buffer::from_text(&text), false);
+        a.set_size(80, 10);
+        a.handle_key(key('/'));
+        for c in "l29".chars() {
+            a.handle_key(key(c));
+        }
+        // The hit on the last row scrolls one line up so it is not
+        // hidden under the prompt overlay.
+        assert_eq!(a.cursor.row, 29);
+        assert_eq!(a.top, 21);
     }
 
     #[test]
