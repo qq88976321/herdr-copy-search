@@ -1,0 +1,16 @@
+[package]
+name = "herdr-copy-search"
+version = "0.1.0"
+edition = "2021"
+description = "tmux-style copy mode with incremental search for herdr scrollback"
+license = "MIT"
+
+[dependencies]
+base64 = "0.22"
+crossterm = "0.28"
+regex = "1"
+unicode-width = "0.2"
+
+[profile.release]
+lto = true
+strip = true
