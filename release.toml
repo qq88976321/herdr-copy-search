@@ -1,0 +1,13 @@
+# cargo-release config: local-only releases (no crates.io, no remote).
+publish = false
+push = false
+tag-name = "v{{version}}"
+allow-branch = ["master"]
+pre-release-hook = ["just", "gate"]
+
+# Keep the herdr plugin manifest version in lockstep with Cargo.toml.
+[[pre-release-replacements]]
+file = "herdr-plugin.toml"
+search = "^version = \"[0-9.]+\"$"
+replace = "version = \"{{version}}\""
+exactly = 1
