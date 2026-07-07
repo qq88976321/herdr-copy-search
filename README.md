@@ -50,6 +50,24 @@ If your herdr build supports `type = "plugin_action"` bindings, the
 plugin also exposes `copy-search.copy`, `copy-search.search`, and
 `copy-search.extract` actions that open the same panes.
 
+## Recommended herdr settings
+
+This plugin opens as a herdr overlay pane; herdr draws a border around
+it and renders it full-window. To make it feel more in-place, set
+
+```toml
+[ui]
+pane_borders = false
+```
+
+in `~/.config/herdr/config.toml` (then `herdr server reload-config`) to
+drop the frame herdr draws around the overlay. It is a global setting
+that also removes split-pane dividers, so it suits one-pane-per-tab
+layouts best. herdr v0.7.x has no pane-scoped floating surface yet, so
+the overlay always covers the whole window (`--placement overlay` and
+`zoomed` render the same); confining it to a single pane awaits upstream
+floating surfaces.
+
 ## Copy / search mode
 
 Opens an overlay over the focused pane showing its recent scrollback
