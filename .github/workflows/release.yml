@@ -1,0 +1,41 @@
+# Release artifacts: when a v* tag is pushed, build the binary for
+# linux and macos and attach the archives to a GitHub Release.
+# Version bump + tag creation stay LOCAL via `just release`
+# (cargo-release); see docs/checklists/CL-03-release-pipeline.md.
+#
+# Release binaries are a convenience for humans; `herdr plugin
+# install` builds from source via herdr-plugin.toml [[build]].
+#
+# STATUS: UNVERIFIED - authored 2026-07-07 while the repo was
+# local-only; never executed. CL-03 step 6 verifies it on the first
+# tag push, then deletes this status block.
+name: release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: write
+
+jobs:
+  upload:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          bin: herdr-copy-search
+          target: ${{ matrix.target }}
+          checksum: sha256
+          token: ${{ secrets.GITHUB_TOKEN }}
