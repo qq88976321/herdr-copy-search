@@ -133,11 +133,19 @@ pub fn clip_spans<K: Copy + PartialEq>(
     out
 }
 
-/// Transient bottom-row overlay: Some while the pattern menu or a
-/// message is showing; None otherwise so the content keeps the row
-/// (tmux behavior). The prompt renders separately via line_edit_spans;
-/// committed searches live in the top-right indicator.
-pub fn bottom_overlay(app: &App) -> Option<String> {
+/// Badge naming the current mode, leading the persistent bottom row.
+pub fn mode_badge(app: &App) -> &'static str {
+    match app.mode {
+        Mode::Prompt { .. } => "[search]",
+        _ => "[copy]",
+    }
+}
+
+/// Extra text for the mode row after the badge: the pattern menu while
+/// it is open, or a transient message. The prompt renders separately
+/// via line_edit_spans; committed searches live in the top-right
+/// indicator.
+pub fn mode_row_message(app: &App) -> Option<String> {
     if matches!(app.mode, Mode::PatternMenu) {
         return Some(crate::patterns::menu_line());
     }
@@ -323,28 +331,33 @@ pub fn draw(out: &mut impl Write, app: &App) -> io::Result<()> {
             ResetColor
         )?;
     }
-    // Transient bottom overlay (prompt, pattern menu, message).
+    // Persistent bottom mode row: the badge, then the prompt, the
+    // pattern menu, or a transient message (herdr-native mode style).
+    queue!(
+        out,
+        MoveTo(0, (app.view_rows - 1) as u16),
+        Clear(ClearType::CurrentLine)
+    )?;
+    let badge = truncate_to_width(mode_badge(app).to_string(), app.view_cols);
+    queue!(
+        out,
+        SetAttribute(Attribute::Reverse),
+        crossterm::style::Print(&badge),
+        SetAttribute(Attribute::Reset),
+        crossterm::style::Print(" ")
+    )?;
+    let rest = app.view_cols.saturating_sub(badge.chars().count() + 1);
     if let Mode::Prompt {
         direction, input, ..
     } = &app.mode
     {
-        queue!(
-            out,
-            MoveTo(0, (app.view_rows - 1) as u16),
-            Clear(ClearType::CurrentLine)
-        )?;
         let prefix = match direction {
             Direction::Forward => "/",
             Direction::Backward => "?",
         };
-        print_line_edit(out, prefix, input, app.view_cols)?;
-    } else if let Some(text) = bottom_overlay(app) {
-        queue!(
-            out,
-            MoveTo(0, (app.view_rows - 1) as u16),
-            Clear(ClearType::CurrentLine)
-        )?;
-        let text = truncate_to_width(text, app.view_cols);
+        print_line_edit(out, prefix, input, rest)?;
+    } else if let Some(text) = mode_row_message(app) {
+        let text = truncate_to_width(text, rest);
         queue!(out, crossterm::style::Print(&text))?;
     }
     out.flush()
@@ -596,8 +609,18 @@ mod tests {
             vec![(false, "/b".into()), (true, " ".into())]
         );
         a.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-        assert_eq!(bottom_overlay(&a), None);
+        assert_eq!(mode_row_message(&a), None);
         assert_eq!(indicator(&a), "/b [1/1] [1/1]");
+    }
+
+    #[test]
+    fn mode_badge_names_search_while_prompting() {
+        let mut a = app("foo");
+        assert_eq!(mode_badge(&a), "[copy]");
+        a.handle_key(key('/'));
+        assert_eq!(mode_badge(&a), "[search]");
+        a.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert_eq!(mode_badge(&a), "[copy]");
     }
 
     fn line_edit(text: &str, left: usize) -> LineEdit {
@@ -655,12 +678,12 @@ mod tests {
     }
 
     #[test]
-    fn overlay_shows_messages_and_menu() {
+    fn mode_row_shows_messages_and_menu() {
         let mut a = app("foo");
         a.handle_key(key('n'));
-        assert_eq!(bottom_overlay(&a).as_deref(), Some("no previous search"));
+        assert_eq!(mode_row_message(&a).as_deref(), Some("no previous search"));
         a.handle_key(key('p'));
-        assert!(bottom_overlay(&a).unwrap().starts_with("pattern:"));
+        assert!(mode_row_message(&a).unwrap().starts_with("pattern:"));
     }
 
     #[test]

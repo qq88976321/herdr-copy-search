@@ -80,15 +80,13 @@ impl App {
         }
     }
 
-    /// Called by the UI before each draw with the terminal size. The
-    /// content owns every row; the bottom row is only overlaid while a
-    /// prompt, menu, or message is showing (tmux-style seamless view).
+    /// Called by the UI before each draw with the terminal size.
     pub fn set_size(&mut self, cols: usize, rows: usize) {
         self.view_cols = cols.max(1);
         self.view_rows = rows.max(1);
         if self.pending_bottom {
             self.pending_bottom = false;
-            self.top = self.buf.last_row().saturating_sub(self.view_rows - 1);
+            self.top = self.max_top();
             if let Mode::Prompt { origin_top, .. } = &mut self.mode {
                 *origin_top = self.top;
             }
@@ -96,15 +94,10 @@ impl App {
         self.ensure_visible();
     }
 
-    /// While the bottom row is overlaid by the prompt or pattern menu,
-    /// it does not count as visible content, so incremental search hits
-    /// are never scrolled underneath the overlay.
-    fn reserved_bottom(&self) -> usize {
-        matches!(self.mode, Mode::Prompt { .. } | Mode::PatternMenu) as usize
-    }
-
+    /// The bottom row is the persistent mode row (herdr-native style),
+    /// so it never counts as visible content.
     fn content_rows(&self) -> usize {
-        (self.view_rows - self.reserved_bottom()).max(1)
+        (self.view_rows - 1).max(1)
     }
 
     fn max_top(&self) -> usize {
@@ -146,7 +139,7 @@ impl App {
         let top = self.top as isize + delta;
         self.top = top.clamp(0, self.max_top() as isize) as usize;
         let low = self.top;
-        let high = self.top + self.view_rows - 1;
+        let high = self.top + self.content_rows() - 1;
         let row = self.cursor.row.clamp(low, high.min(self.buf.last_row()));
         self.cursor = Pos {
             row,
@@ -322,8 +315,8 @@ impl App {
     fn handle_normal(&mut self, key: KeyEvent) -> Option<Effect> {
         use KeyCode::*;
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-        let half = (self.view_rows / 2).max(1) as isize;
-        let page = self.view_rows.max(1) as isize;
+        let half = (self.content_rows() / 2).max(1) as isize;
+        let page = self.content_rows() as isize;
         if key.modifiers.contains(KeyModifiers::ALT) {
             if let Char(c) = key.code {
                 if let Some(def) = patterns::by_key(c) {
@@ -536,7 +529,7 @@ impl App {
 
     fn pos_at(&self, x: u16, y: u16) -> Option<Pos> {
         let y = y as usize;
-        if y >= self.view_rows {
+        if y >= self.content_rows() {
             return None;
         }
         let row = (self.top + y).min(self.buf.last_row());
@@ -717,16 +710,16 @@ mod tests {
     }
 
     #[test]
-    fn view_uses_all_rows() {
+    fn view_reserves_the_mode_row() {
         let text = (0..30).map(|i| format!("l{i}\n")).collect::<String>();
         let mut a = App::new(Buffer::from_text(&text), false);
         a.set_size(80, 10);
         assert_eq!(a.view_rows, 10);
-        assert_eq!(a.top, 20, "bottom row is content, not chrome");
+        assert_eq!(a.top, 21, "bottom row is the persistent mode row");
     }
 
     #[test]
-    fn prompt_reserves_bottom_row_for_matches() {
+    fn search_hits_stay_above_the_mode_row() {
         let text = (0..30).map(|i| format!("l{i}\n")).collect::<String>();
         let mut a = App::new(Buffer::from_text(&text), false);
         a.set_size(80, 10);
@@ -734,8 +727,8 @@ mod tests {
         for c in "l29".chars() {
             a.handle_key(key(c));
         }
-        // The hit on the last row scrolls one line up so it is not
-        // hidden under the prompt overlay.
+        // The hit on the last buffer row is fully visible right above
+        // the mode row.
         assert_eq!(a.cursor.row, 29);
         assert_eq!(a.top, 21);
     }

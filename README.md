@@ -125,8 +125,9 @@ synced automatically.
   searches do not match across a wrap boundary, and if the pane
   changes between the two reads the wrap joining degrades to hard
   breaks for that snapshot.
-- The bottom row belongs to the content; prompt, pattern menu, and
-  messages overlay it temporarily, and copy-mode state lives in the
+- The bottom row is a persistent mode row (`[copy]` / `[search]`)
+  holding the prompt, pattern menu, and messages, like herdr's native
+  copy mode; match counts and the cursor position stay in the
   tmux-style top-right indicator.
 - No serde or toml crates: herdr's context JSON and the plugin config
   are flat, so small string-field extractors are enough.
