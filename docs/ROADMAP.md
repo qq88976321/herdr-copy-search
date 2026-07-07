@@ -117,6 +117,7 @@ user is the author.
 | F6 | [ ] Extract: multi-select (Tab-mark several tokens) | S/M | #13 |
 | F7 | [!] Copy last command output / prompt jump (OSC 133) | L | #5 |
 | F8 | [~] Smartcase toggle in search (`S`), TTY check pending | S | weak |
+| F9 | [ ] Mode-row polish: theme-aware styling + keybinding hints | S/M | author req |
 | R1 | [x] Panic audit: none in non-test code; TUI panic-safe | S | robustness |
 
 - F1: every mature tool converged on user regexes in config (extrakto
@@ -166,6 +167,34 @@ user is the author.
   heuristically.
 - F8: weak evidence (no high-reaction ask found); do only if it
   personally itches. Default should be smartcase if built.
+- F9: the persistent bottom mode row (ui.rs: the `[copy]`/`[search]`
+  badge, the pattern menu / transient messages, and the right-side
+  indicator) reads plain today. Make it look intentional and, space
+  permitting, teach the keys. Origin: author noticed it after herdr
+  `pane_borders = false` removed the overlay frame (see In-place
+  section) and the bare mode row became the only chrome. Sub-goals:
+  - Style the badge/indicator to sit against the pane deliberately
+    (dim/reverse bar or a subtle accent) instead of default text.
+    "Follow theme color" needs a CL-07 investigation first: the plugin
+    renders via crossterm and is NOT handed herdr's theme; check whether
+    any HERDR env exposes theme colors. If not, fall back to
+    terminal-adaptive styling (reverse-video bar / standard 16-color
+    accents / honor NO_COLOR) so it matches whatever terminal theme the
+    user runs, rather than hardcoding catppuccin.
+  - Contextual keybinding hint: a compact, mode-aware cheat strip (copy
+    mode vs search prompt vs pattern menu vs extract) showing the few
+    most useful keys, only when width allows; consider a `?` toggle for
+    a fuller hint line so the default stays uncluttered. Settle the hint
+    set + toggle key in the CL-06 brainstorm.
+  - Constraints: keep it single-line (the reserved mode row that
+    content_rows() already excludes); truncate hints to display width
+    (reuse the ui.rs width clipping); do not break the char-space span
+    merge or the OSC 52 path. Rendering change -> regenerate demo GIFs
+    (CL-04).
+  - Done when: badge/indicator styled and a mode-aware hint shows within
+    width limits (and/or `?` toggles it); README notes it; unit tests
+    cover the hint-string selection + truncation (rendering itself is
+    TTY-verified).
 - R1: audit unwrap/expect/panic in non-test code paths; each site
   either becomes an error path or gets a comment stating why it
   cannot fail. TUI must never panic mid-alt-screen (leaves the
@@ -192,6 +221,15 @@ overriding copy mode in v1", and plugin surfaces are panes
 disruptive: it covers only the focused pane and restores focus and
 zoom on close; this plugin additionally anchors the opening view to
 the pane's visible screen so it LOOKS in-place.
+
+Mitigation found 2026-07-07 (herdr 0.7.1): setting `[ui] pane_borders =
+false` in the user's herdr config removes the frame herdr draws around
+the overlay, closing most of the remaining visual gap (verified: the
+"ring" disappears). Caveat: it is a herdr-global, user-side setting, so
+split-pane dividers also lose their borders. This does not make the
+plugin truly in-place (still a pane), but the borderless overlay is
+close enough that the author accepted it; worth noting in the README as
+a recommended herdr setting. True in-place stays upstream-blocked below.
 
 Unblock triggers (checked by CL-07):
 - native `/` `?` search ships in herdr copy mode -> see Archive
