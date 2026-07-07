@@ -29,13 +29,18 @@ impl Config {
     }
 }
 
-/// Missing dir, file, or key all fall back to defaults.
-pub fn load(env: impl Fn(&str) -> Option<String>) -> Config {
-    let text = env("HERDR_PLUGIN_CONFIG_DIR")
+/// Raw text of $HERDR_PLUGIN_CONFIG_DIR/config.toml, or "" when the dir
+/// or file is missing. Callers derive both Config and Patterns from it.
+pub fn read_config_text(env: impl Fn(&str) -> Option<String>) -> String {
+    env("HERDR_PLUGIN_CONFIG_DIR")
         .map(|dir| std::path::Path::new(&dir).join("config.toml"))
         .and_then(|path| std::fs::read_to_string(path).ok())
-        .unwrap_or_default();
-    Config::from_toml(&text)
+        .unwrap_or_default()
+}
+
+/// Missing dir, file, or key all fall back to defaults.
+pub fn load(env: impl Fn(&str) -> Option<String>) -> Config {
+    Config::from_toml(&read_config_text(env))
 }
 
 /// Raw trimmed value for a top-level key, inline comment stripped;
@@ -64,6 +69,41 @@ fn toml_value<'a>(toml: &'a str, key: &str) -> Option<&'a str> {
 
 pub fn toml_int_field(toml: &str, key: &str) -> Option<i64> {
     toml_value(toml, key)?.parse().ok()
+}
+
+/// All `pattern_<k> = "regex"` overrides in document order, where `<k>`
+/// is a single menu-key char. An empty value (`pattern_u = ""`) is kept
+/// as an empty string, the caller's signal to disable a default. Scans
+/// flat keys only, stopping at the first `[table]` header.
+pub fn pattern_overrides(toml: &str) -> Vec<(char, String)> {
+    let mut out = Vec::new();
+    for line in toml.lines() {
+        let line = line.trim();
+        if line.starts_with('[') {
+            break;
+        }
+        let Some((k, v)) = line.split_once('=') else {
+            continue;
+        };
+        let Some(suffix) = k.trim().strip_prefix("pattern_") else {
+            continue;
+        };
+        let mut chars = suffix.chars();
+        let (Some(key), None) = (chars.next(), chars.next()) else {
+            continue;
+        };
+        let v = v.trim();
+        let value = if let Some(rest) = v.strip_prefix('"') {
+            // Quoted: take up to the closing quote, ignoring any trailing
+            // inline comment, mirroring toml_value.
+            let end = rest.find('"').unwrap_or(rest.len());
+            rest[..end].to_string()
+        } else {
+            v.split('#').next().unwrap_or("").trim().to_string()
+        };
+        out.push((key, value));
+    }
+    out
 }
 
 pub fn toml_str_field(toml: &str, key: &str) -> Option<String> {
@@ -102,6 +142,21 @@ mod tests {
             Some("hello # not a comment")
         );
         assert_eq!(toml_str_field(toml, "bare").as_deref(), Some("word"));
+    }
+
+    #[test]
+    fn pattern_overrides_collects_single_char_keys() {
+        // No escape processing: the value is verbatim between the quotes.
+        let toml = "extract_height = 50\n\
+                    pattern_j = \"\\bTODO\\b\" # tasks\n\
+                    pattern_u = \"\"\n\
+                    pattern_multi = \"ignored\"\n\
+                    [table]\n\
+                    pattern_x = \"nope\"\n";
+        assert_eq!(
+            pattern_overrides(toml),
+            vec![('j', "\\bTODO\\b".to_string()), ('u', String::new())]
+        );
     }
 
     #[test]

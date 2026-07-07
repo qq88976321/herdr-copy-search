@@ -147,7 +147,7 @@ pub fn mode_badge(app: &App) -> &'static str {
 /// indicator.
 pub fn mode_row_message(app: &App) -> Option<String> {
     if matches!(app.mode, Mode::PatternMenu) {
-        return Some(crate::patterns::menu_line());
+        return Some(app.patterns.menu_line());
     }
     app.message.clone()
 }

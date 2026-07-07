@@ -3,6 +3,7 @@ use herdr_copy_search::app::{App, Effect};
 use herdr_copy_search::buffer::Buffer;
 use herdr_copy_search::extract::{ExtractApp, ExtractEffect};
 use herdr_copy_search::herdr::{self, Herdr};
+use herdr_copy_search::patterns::Patterns;
 use herdr_copy_search::{osc52, ui};
 use std::io::{self, IsTerminal};
 use std::path::PathBuf;
@@ -206,8 +207,14 @@ fn extract_mode(buf: &Buffer, height: u8, source_pane: Option<&str>) -> io::Resu
     Ok(())
 }
 
-fn copy_mode(buf: Buffer, start_search: bool, screen_rows: Option<usize>) -> io::Result<()> {
+fn copy_mode(
+    buf: Buffer,
+    start_search: bool,
+    screen_rows: Option<usize>,
+    patterns: Patterns,
+) -> io::Result<()> {
     let mut app = App::new(buf, start_search, screen_rows);
+    app.set_patterns(patterns);
     if run(&mut app)? {
         std::thread::sleep(osc52::FORWARD_GRACE);
     }
@@ -232,13 +239,14 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let height = cli.height.unwrap_or_else(|| {
-        herdr_copy_search::config::load(|k| std::env::var(k).ok()).extract_height
-    });
+    let cfg_text = herdr_copy_search::config::read_config_text(|k| std::env::var(k).ok());
+    let height = cli
+        .height
+        .unwrap_or_else(|| herdr_copy_search::config::Config::from_toml(&cfg_text).extract_height);
     let result = match cli.mode {
         RunMode::Extract => extract_mode(&buf, height, source_pane.as_deref()),
-        RunMode::Copy => copy_mode(buf, false, screen_rows),
-        RunMode::Search => copy_mode(buf, true, screen_rows),
+        RunMode::Copy => copy_mode(buf, false, screen_rows, Patterns::from_config(&cfg_text)),
+        RunMode::Search => copy_mode(buf, true, screen_rows, Patterns::from_config(&cfg_text)),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

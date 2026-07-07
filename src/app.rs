@@ -1,7 +1,7 @@
 use crate::buffer::{Buffer, Pos};
 use crate::lineedit::LineEdit;
 use crate::motion;
-use crate::patterns::{self, PatternDef};
+use crate::patterns::{PatternDef, Patterns};
 use crate::search::{Direction, Search};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
@@ -42,6 +42,7 @@ pub struct App {
     pub view_rows: usize,
     pub view_cols: usize,
     pub search: Search,
+    pub patterns: Patterns,
     pub mode: Mode,
     pub sel: Option<(SelKind, Pos)>,
     pub message: Option<String>,
@@ -82,6 +83,7 @@ impl App {
             view_rows: 1,
             view_cols: 80,
             search: Search::default(),
+            patterns: Patterns::default(),
             mode,
             sel: None,
             message: None,
@@ -93,6 +95,11 @@ impl App {
             pending_bottom: true,
             screen_rows,
         }
+    }
+
+    /// Replace the active pattern set (copycat defaults + user config).
+    pub fn set_patterns(&mut self, patterns: Patterns) {
+        self.patterns = patterns;
     }
 
     /// Called by the UI before each draw with the terminal size.
@@ -304,7 +311,7 @@ impl App {
     /// Predefined pattern search, copycat style: backward from the
     /// cursor so `n` walks up through older output and `N` back down.
     fn activate_pattern(&mut self, def: &PatternDef) {
-        self.search.run(&self.buf, def.regex, Direction::Backward);
+        self.search.run(&self.buf, &def.regex, Direction::Backward);
         let n = self.search.matches.len();
         if n == 0 {
             self.message = Some(format!("no match: {}", def.name));
@@ -324,8 +331,8 @@ impl App {
             KeyCode::Esc => self.mode = Mode::Normal,
             KeyCode::Char(c) => {
                 self.mode = Mode::Normal;
-                match patterns::by_key(c) {
-                    Some(def) => self.activate_pattern(def),
+                match self.patterns.by_key(c).cloned() {
+                    Some(def) => self.activate_pattern(&def),
                     None => self.message = Some(format!("no pattern: {c}")),
                 }
             }
@@ -360,8 +367,8 @@ impl App {
         }
         if key.modifiers.contains(KeyModifiers::ALT) {
             if let Char(c) = key.code {
-                if let Some(def) = patterns::by_key(c) {
-                    self.activate_pattern(def);
+                if let Some(def) = self.patterns.by_key(c).cloned() {
+                    self.activate_pattern(&def);
                 }
                 return None;
             }
@@ -813,6 +820,17 @@ mod tests {
         a.handle_key(key('z'));
         assert!(a.sel.is_none());
         assert!(!a.quit);
+    }
+
+    #[test]
+    fn custom_pattern_activates_via_alt_key() {
+        let mut a = app("id 42\nid abc\nid 7");
+        // In config.toml this is: pattern_z = "id \d+"
+        a.set_patterns(Patterns::from_config("pattern_z = \"id \\d+\"\n"));
+        a.handle_key(alt('z'));
+        // Backward seek from the bottom row lands on its own match.
+        assert_eq!(a.cursor, Pos { row: 2, col: 0 });
+        assert_eq!(a.search.matches.len(), 2);
     }
 
     #[test]

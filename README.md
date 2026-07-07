@@ -77,6 +77,22 @@ entrypoint is the same view opened with the search prompt active.
 Pattern searches run backward from the cursor like tmux-copycat: the
 nearest match above is selected and `n` walks up through older output.
 
+Add your own patterns, or disable defaults, in the plugin config file
+(path from `herdr plugin config-dir copy-search`). A `pattern_<key>`
+entry appears in the menu and on `alt+<key>`; an empty value removes a
+default; reusing a default's key replaces its regex:
+
+```toml
+# $HERDR_PLUGIN_CONFIG_DIR/config.toml
+pattern_t = "\\bTODO\\b"   # p then t, or alt+t
+pattern_j = "\\{[^}]*\\}"  # a JSON-ish object
+pattern_u = ""             # disable the built-in url pattern
+```
+
+Values are taken verbatim between the quotes (no TOML escape
+processing). An invalid regex falls back to a literal search, matching
+the incremental-search behavior.
+
 ## Extract mode
 
 extrakto-style picker over the same scrollback: tokens (or whole lines)

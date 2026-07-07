@@ -109,7 +109,7 @@ user is the author.
 
 | ID | Item | Effort | Evidence rank |
 |----|------|--------|---------------|
-| F1 | [ ] User-defined patterns via plugin config | M | #2 |
+| F1 | [~] User-defined patterns via plugin config, TTY check pending | M | #2 |
 | F2 | [ ] Extract: jump-to-match (land in copy mode at the token) | S/M | #11 |
 | F3 | [ ] Open actions: file:line in $EDITOR, URL in browser | M/L | #4 |
 | F4 | [ ] Search across soft-wrap boundaries | M | #10 |
