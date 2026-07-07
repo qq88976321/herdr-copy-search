@@ -184,7 +184,10 @@ vhs tapes so they can be regenerated after any UI change.
 - The bottom row is a persistent mode row (`[copy]` / `[search]`)
   holding the prompt, pattern menu, and messages, like herdr's native
   copy mode; match counts and the cursor position stay in the
-  tmux-style top-right indicator.
+  tmux-style top-right indicator. The badge is accent-colored (copy vs
+  search) and, when the row is otherwise idle, it shows a dim,
+  context-aware keybinding hint. Colors honor `NO_COLOR`, falling back
+  to reverse/dim attributes that follow the terminal's own theme.
 - Opening the overlay keeps the source pane's screen in place: a third
   `visible` read anchors the bottom-most view to the rows the pane was
   showing, so a partly filled screen stays at the top with blank rows

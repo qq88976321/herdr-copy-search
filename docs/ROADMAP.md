@@ -117,7 +117,7 @@ user is the author.
 | F6 | [ ] Extract: multi-select (Tab-mark several tokens) | S/M | #13 |
 | F7 | [!] Copy last command output / prompt jump (OSC 133) | L | #5 |
 | F8 | [~] Smartcase toggle in search (`S`), TTY check pending | S | weak |
-| F9 | [ ] Mode-row polish: theme-aware styling + keybinding hints | S/M | author req |
+| F9 | [~] Mode-row polish: accent badge + idle key hint (TTY check + GIF pending) | S/M | author req |
 | R1 | [x] Panic audit: none in non-test code; TUI panic-safe | S | robustness |
 
 - F1: every mature tool converged on user regexes in config (extrakto

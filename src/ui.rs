@@ -153,6 +153,21 @@ pub fn mode_row_message(app: &App) -> Option<String> {
     app.message.clone()
 }
 
+/// Contextual keybinding hint for the mode row, shown dim when the row
+/// is otherwise idle (no prompt, pattern menu, or transient message).
+/// None outside Normal mode - the prompt shows the query and the
+/// pattern menu is its own hint.
+pub fn mode_hint(app: &App) -> Option<String> {
+    if !matches!(app.mode, Mode::Normal) {
+        return None;
+    }
+    Some(if app.sel.is_some() {
+        "y copy  Enter copy+exit  Esc clear".to_string()
+    } else {
+        "/ search  n/N next  v select  p patterns  y copy  q quit".to_string()
+    })
+}
+
 /// Always-on top-right indicator, tmux mode-style: selection state,
 /// the active search summary, and the cursor position.
 pub fn indicator(app: &App) -> String {
@@ -306,6 +321,13 @@ fn print_line_edit(
     Ok(())
 }
 
+/// Colors are emitted unless NO_COLOR is set (https://no-color.org);
+/// styling then falls back to attributes (reverse/dim) that follow the
+/// terminal's own theme.
+fn use_color() -> bool {
+    std::env::var_os("NO_COLOR").is_none()
+}
+
 /// Draw the whole screen: content rows then the bottom line.
 pub fn draw(out: &mut impl Write, app: &App) -> io::Result<()> {
     for y in 0..app.view_rows {
@@ -323,14 +345,23 @@ pub fn draw(out: &mut impl Write, app: &App) -> io::Result<()> {
     let ind = truncate_to_width(indicator(app), app.view_cols.saturating_sub(1));
     let w = ind.chars().count() + 1; // leading pad masks a cut wide char
     if w <= app.view_cols {
-        queue!(
-            out,
-            MoveTo((app.view_cols - w) as u16, 0),
-            SetForegroundColor(Color::Black),
-            SetBackgroundColor(Color::Yellow),
-            crossterm::style::Print(format!(" {ind}")),
-            ResetColor
-        )?;
+        queue!(out, MoveTo((app.view_cols - w) as u16, 0))?;
+        if use_color() {
+            queue!(
+                out,
+                SetForegroundColor(Color::Black),
+                SetBackgroundColor(Color::Yellow),
+                crossterm::style::Print(format!(" {ind}")),
+                ResetColor
+            )?;
+        } else {
+            queue!(
+                out,
+                SetAttribute(Attribute::Reverse),
+                crossterm::style::Print(format!(" {ind}")),
+                SetAttribute(Attribute::Reset)
+            )?;
+        }
     }
     // Persistent bottom mode row: the badge, then the prompt, the
     // pattern menu, or a transient message (herdr-native mode style).
@@ -340,13 +371,33 @@ pub fn draw(out: &mut impl Write, app: &App) -> io::Result<()> {
         Clear(ClearType::CurrentLine)
     )?;
     let badge = truncate_to_width(mode_badge(app).to_string(), app.view_cols);
-    queue!(
-        out,
-        SetAttribute(Attribute::Reverse),
-        crossterm::style::Print(&badge),
-        SetAttribute(Attribute::Reset),
-        crossterm::style::Print(" ")
-    )?;
+    // Search vs copy get distinct accent colors (terminal-themed); with
+    // NO_COLOR the badge falls back to a reverse-video bar.
+    if use_color() {
+        let bg = if matches!(app.mode, Mode::Prompt { .. }) {
+            Color::Magenta
+        } else {
+            Color::Cyan
+        };
+        queue!(
+            out,
+            SetForegroundColor(Color::Black),
+            SetBackgroundColor(bg),
+            SetAttribute(Attribute::Bold),
+            crossterm::style::Print(&badge),
+            ResetColor,
+            SetAttribute(Attribute::Reset)
+        )?;
+    } else {
+        queue!(
+            out,
+            SetAttribute(Attribute::Reverse),
+            SetAttribute(Attribute::Bold),
+            crossterm::style::Print(&badge),
+            SetAttribute(Attribute::Reset)
+        )?;
+    }
+    queue!(out, crossterm::style::Print(" "))?;
     let rest = app.view_cols.saturating_sub(badge.chars().count() + 1);
     if let Mode::Prompt {
         direction, input, ..
@@ -360,6 +411,15 @@ pub fn draw(out: &mut impl Write, app: &App) -> io::Result<()> {
     } else if let Some(text) = mode_row_message(app) {
         let text = truncate_to_width(text, rest);
         queue!(out, crossterm::style::Print(&text))?;
+    } else if let Some(hint) = mode_hint(app) {
+        // Idle row: teach the keys, dim so it stays in the background.
+        let hint = truncate_to_width(hint, rest);
+        queue!(
+            out,
+            SetAttribute(Attribute::Dim),
+            crossterm::style::Print(&hint),
+            SetAttribute(Attribute::Reset)
+        )?;
     }
     out.flush()
 }
@@ -494,6 +554,35 @@ mod tests {
     /// Project styled spans down to their highlight class.
     fn hls(spans: Vec<(SpanAttrs, String)>) -> Vec<(Hl, String)> {
         spans.into_iter().map(|(a, s)| (a.hl, s)).collect()
+    }
+
+    #[test]
+    fn mode_hint_normal_lists_core_keys() {
+        let a = app("hello");
+        let h = mode_hint(&a).expect("hint in normal mode");
+        assert!(h.contains("search"), "hint mentions search: {h}");
+        assert!(h.contains("copy"), "hint mentions copy: {h}");
+        assert!(h.contains("quit"), "hint mentions quit: {h}");
+    }
+
+    #[test]
+    fn mode_hint_switches_when_selecting() {
+        let mut a = app("hello world");
+        let normal = mode_hint(&a).unwrap();
+        a.handle_key(key('v'));
+        let selecting = mode_hint(&a).expect("hint while selecting");
+        assert_ne!(normal, selecting);
+        assert!(selecting.contains("copy"));
+    }
+
+    #[test]
+    fn mode_hint_hidden_in_prompt_and_menu() {
+        let mut a = app("hello");
+        a.handle_key(key('/'));
+        assert_eq!(mode_hint(&a), None, "prompt shows the query, not a hint");
+        a.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        a.handle_key(key('p'));
+        assert_eq!(mode_hint(&a), None, "pattern menu is its own hint");
     }
 
     #[test]
