@@ -20,7 +20,7 @@ go unanswered. Expect tmux-like behavior, not tmux-grade maturity.
 ## Install
 
 ```sh
-herdr plugin install <owner>/herdr-copy-search   # from a git host
+herdr plugin install qq88976321/herdr-copy-search   # from a git host
 # or for local development:
 herdr plugin link /path/to/herdr-copy-search
 cargo build --release --locked                   # link does not run build steps
