@@ -13,3 +13,21 @@ long:     this is a deliberately long line to exercise horizontal scrolling whic
 repeated token alpha
 repeated token alpha
 unique tail omega
+
+--- realistic session output below (used by demo/*.tape; append only,
+--- do not rewrite existing lines: tapes and manual tests match them)
+$ cargo build
+   Compiling herdr-copy-search v0.1.1 (/home/user/dev/herdr-copy-search)
+error[E0308]: mismatched types
+  --> src/extract.rs:212:18
+   |
+   = help: see https://doc.rust-lang.org/error_codes/E0308.html
+error: could not compile `herdr-copy-search` (lib) due to 1 previous error
+$ git log --oneline -3
+252566c docs: add CLAUDE.md repo constitution for agents
+702ec7f feat(extract): scrollable backdrop (wheel regions, PgUp/PgDn)
+804a666 feat(app): align opening view to the source pane visible screen
+$ curl -sS https://api.example.com/v1/items?page=2 -o /tmp/items.json
+$ tail -2 /var/log/app/server.log
+2026-07-07T10:12:03Z INFO  GET /health 200 from 10.1.2.3 in 2 ms
+2026-07-07T10:12:41Z ERROR upload failed: token "expired" for user 'demo' https://status.example.com/incidents/4217
