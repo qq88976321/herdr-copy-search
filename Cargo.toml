@@ -4,6 +4,20 @@ version = "0.1.1"
 edition = "2021"
 description = "tmux-style copy mode with incremental search for herdr scrollback"
 license = "MIT"
+# Unverified floor ([lints] needs cargo >= 1.74); verify per
+# docs/checklists/CL-05-lints-and-msrv.md and keep the ci.yml msrv
+# job in sync.
+rust-version = "1.74"
+
+# Lint policy lives here, not in source attributes; tighten only via
+# docs/checklists/CL-05-lints-and-msrv.md.
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
 
 [dependencies]
 base64 = "0.22"
