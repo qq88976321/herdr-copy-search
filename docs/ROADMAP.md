@@ -117,7 +117,7 @@ user is the author.
 | F6 | [ ] Extract: multi-select (Tab-mark several tokens) | S/M | #13 |
 | F7 | [!] Copy last command output / prompt jump (OSC 133) | L | #5 |
 | F8 | [~] Smartcase toggle in search (`S`), TTY check pending | S | weak |
-| R1 | [ ] Audit ~16 unwrap/expect/panic sites in src | S | robustness |
+| R1 | [x] Panic audit: none in non-test code; TUI panic-safe | S | robustness |
 
 - F1: every mature tool converged on user regexes in config (extrakto
   redirects all pattern requests to its config; wezterm
