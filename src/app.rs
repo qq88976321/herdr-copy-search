@@ -403,6 +403,18 @@ impl App {
             Char('?') => self.open_prompt(Direction::Backward),
             Char('n') => self.jump_match(true),
             Char('N') => self.jump_match(false),
+            Char('S') => {
+                self.search.smartcase = !self.search.smartcase;
+                let pattern = self.search.pattern.clone();
+                let dir = self.search.direction.unwrap_or(Direction::Forward);
+                if !pattern.is_empty() {
+                    self.search.run(&self.buf, &pattern, dir);
+                }
+                self.message = Some(format!(
+                    "smartcase: {}",
+                    if self.search.smartcase { "on" } else { "off" }
+                ));
+            }
             Char('h') | Left => {
                 let col = self.cursor.col.saturating_sub(1);
                 self.goto(Pos {
@@ -820,6 +832,25 @@ mod tests {
         a.handle_key(key('z'));
         assert!(a.sel.is_none());
         assert!(!a.quit);
+    }
+
+    #[test]
+    fn smartcase_toggle_reruns_search_case_sensitively() {
+        let mut a = app("Foo\nfoo\nFOO");
+        a.handle_key(key('/'));
+        for c in "foo".chars() {
+            a.handle_key(key(c));
+        }
+        a.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        // Lowercase query under smartcase matches every case.
+        assert_eq!(a.search.matches.len(), 3);
+        a.handle_key(key('S'));
+        assert!(!a.search.smartcase);
+        // The same query is now case-sensitive.
+        assert_eq!(a.search.matches.len(), 1);
+        a.handle_key(key('S'));
+        assert!(a.search.smartcase);
+        assert_eq!(a.search.matches.len(), 3);
     }
 
     #[test]
