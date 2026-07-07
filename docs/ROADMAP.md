@@ -113,7 +113,7 @@ user is the author.
 | F2 | [ ] Extract: jump-to-match (land in copy mode at the token) | S/M | #11 |
 | F3 | [ ] Open actions: file:line in $EDITOR, URL in browser | M/L | #4 |
 | F4 | [ ] Search across soft-wrap boundaries | M | #10 |
-| F5 | [ ] Word text objects (viw/vaw/viW) in copy mode | S | #1 gap |
+| F5 | [~] Word text objects (viw/vaw/viW/vaW), TTY check pending | S | #1 gap |
 | F6 | [ ] Extract: multi-select (Tab-mark several tokens) | S/M | #13 |
 | F7 | [!] Copy last command output / prompt jump (OSC 133) | L | #5 |
 | F8 | [ ] Smartcase toggle in search | S | weak |

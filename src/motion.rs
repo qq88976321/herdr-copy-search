@@ -140,6 +140,74 @@ pub fn word_end(buf: &Buffer, p: Pos) -> Pos {
     }
 }
 
+/// Inclusive char-index run of the class at `col` within `chars`.
+/// `chars` must be non-empty; `col` is clamped to the last index.
+fn run_bounds(chars: &[char], col: usize, cls: impl Fn(char) -> u8) -> (usize, usize) {
+    let last = chars.len() - 1;
+    let col = col.min(last);
+    let target = cls(chars[col]);
+    let mut s = col;
+    while s > 0 && cls(chars[s - 1]) == target {
+        s -= 1;
+    }
+    let mut e = col;
+    while e < last && cls(chars[e + 1]) == target {
+        e += 1;
+    }
+    (s, e)
+}
+
+/// vi word/WORD text object around `p`, returning the inclusive
+/// (start, end) positions on p's row. `around` (aw/aW) extends over
+/// adjacent whitespace (trailing preferred, else leading; on a space
+/// run it takes the following word instead); `big` (iW/aW) treats any
+/// non-whitespace run as one WORD. Operates within the single row.
+pub fn word_object(buf: &Buffer, p: Pos, around: bool, big: bool) -> (Pos, Pos) {
+    let chars = &buf.line(p.row).chars;
+    if chars.is_empty() {
+        let z = Pos { row: p.row, col: 0 };
+        return (z, z);
+    }
+    // 0 = whitespace; small words split word/punct (1/2), WORDs do not.
+    let small = |c: char| match class(c) {
+        Class::Space => 0u8,
+        Class::Word => 1,
+        Class::Punct => 2,
+    };
+    let big_cls = |c: char| u8::from(class(c) != Class::Space);
+    let (mut s, mut e) = if big {
+        run_bounds(chars, p.col, big_cls)
+    } else {
+        run_bounds(chars, p.col, small)
+    };
+    if around {
+        let last = chars.len() - 1;
+        let on_space = class(chars[p.col.min(last)]) == Class::Space;
+        if on_space {
+            // Whitespace object: take the run of the word that follows.
+            if e < last {
+                let (_, e2) = if big {
+                    run_bounds(chars, e + 1, big_cls)
+                } else {
+                    run_bounds(chars, e + 1, small)
+                };
+                e = e2;
+            }
+        } else if e < last && class(chars[e + 1]) == Class::Space {
+            // Prefer trailing whitespace.
+            while e < last && class(chars[e + 1]) == Class::Space {
+                e += 1;
+            }
+        } else {
+            // No trailing whitespace: fall back to leading whitespace.
+            while s > 0 && class(chars[s - 1]) == Class::Space {
+                s -= 1;
+            }
+        }
+    }
+    (Pos { row: p.row, col: s }, Pos { row: p.row, col: e })
+}
+
 /// }: next blank line (or the last row).
 pub fn para_forward(buf: &Buffer, row: usize) -> usize {
     let mut r = row;
@@ -205,6 +273,52 @@ mod tests {
         let b = Buffer::from_text("foo\n\nbar");
         assert_eq!(word_forward(&b, p(0, 2)), p(2, 0));
         assert_eq!(word_backward(&b, p(2, 0)), p(0, 0));
+    }
+
+    #[test]
+    fn inner_word_spans_the_word_under_cursor() {
+        let b = Buffer::from_text("foo bar.baz");
+        assert_eq!(word_object(&b, p(0, 5), false, false), (p(0, 4), p(0, 6)));
+        assert_eq!(word_object(&b, p(0, 1), false, false), (p(0, 0), p(0, 2)));
+        // A lone punctuation run is its own inner word.
+        assert_eq!(word_object(&b, p(0, 7), false, false), (p(0, 7), p(0, 7)));
+    }
+
+    #[test]
+    fn inner_big_word_spans_to_whitespace() {
+        let b = Buffer::from_text("foo bar.baz qux");
+        assert_eq!(word_object(&b, p(0, 5), false, true), (p(0, 4), p(0, 10)));
+    }
+
+    #[test]
+    fn around_word_includes_trailing_space() {
+        let b = Buffer::from_text("foo bar baz");
+        assert_eq!(word_object(&b, p(0, 5), true, false), (p(0, 4), p(0, 7)));
+    }
+
+    #[test]
+    fn around_word_at_line_end_includes_leading_space() {
+        let b = Buffer::from_text("foo bar");
+        assert_eq!(word_object(&b, p(0, 5), true, false), (p(0, 3), p(0, 6)));
+    }
+
+    #[test]
+    fn inner_word_on_space_selects_the_space_run() {
+        let b = Buffer::from_text("foo   bar");
+        assert_eq!(word_object(&b, p(0, 4), false, false), (p(0, 3), p(0, 5)));
+    }
+
+    #[test]
+    fn around_word_on_space_includes_following_word() {
+        let b = Buffer::from_text("foo   bar.baz");
+        // small aw stops at the punctuation boundary of the next word.
+        assert_eq!(word_object(&b, p(0, 4), true, false), (p(0, 3), p(0, 8)));
+    }
+
+    #[test]
+    fn word_object_on_empty_line_is_a_point() {
+        let b = Buffer::from_text("foo\n\nbar");
+        assert_eq!(word_object(&b, p(1, 0), false, false), (p(1, 0), p(1, 0)));
     }
 
     #[test]

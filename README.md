@@ -66,6 +66,7 @@ entrypoint is the same view opened with the search prompt active.
 | in prompt: `Left/Right`, `Home/End`, `Delete` | move the cursor and edit the query (`ctrl+a/e` jump, `ctrl+u` clears) |
 | `n` `N` | next / previous match in search direction |
 | `v` `V` | charwise / linewise selection |
+| `iw aw iW aW` | select the word / WORD text object under the cursor (works after `v` or on its own) |
 | `y` | copy selection, or the match under the cursor |
 | `Enter` | copy and exit |
 | `p` | pattern menu: `[u]rl [f]ile [g]it-sha [i]p [d]igits [q]uoted` |

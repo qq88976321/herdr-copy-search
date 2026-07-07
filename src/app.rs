@@ -22,6 +22,13 @@ pub enum SelKind {
     Line,
 }
 
+/// A key waiting for its completion key (vi-style multi-key command).
+#[derive(Debug, Clone, Copy)]
+enum Pending {
+    /// `i`/`a` pressed; the next `w`/`W` selects a word/WORD text object.
+    TextObject { around: bool },
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Effect {
     Copy(String),
@@ -42,6 +49,7 @@ pub struct App {
     want_col: usize,
     drag_origin: Option<Pos>,
     saved_pattern: String,
+    pending: Option<Pending>,
     pending_bottom: bool,
     /// Rows the source pane was showing when captured. The bottom-most
     /// view keeps exactly this many tail rows on screen, so opening
@@ -81,6 +89,7 @@ impl App {
             want_col: 0,
             drag_origin: None,
             saved_pattern: String::new(),
+            pending: None,
             pending_bottom: true,
             screen_rows,
         }
@@ -324,11 +333,31 @@ impl App {
         }
     }
 
+    /// Select the word/WORD text object around the cursor as a charwise
+    /// selection. `around` = aw/aW (includes adjacent whitespace).
+    fn apply_text_object(&mut self, around: bool, big: bool) {
+        let (start, end) = motion::word_object(&self.buf, self.cursor, around, big);
+        self.sel = Some((SelKind::Char, start));
+        self.cursor = end;
+        self.want_col = end.col;
+        self.ensure_visible();
+    }
+
     fn handle_normal(&mut self, key: KeyEvent) -> Option<Effect> {
         use KeyCode::*;
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let half = (self.content_rows() / 2).max(1) as isize;
         let page = self.content_rows() as isize;
+        // A pending `i`/`a` consumes the next key: `w`/`W` completes the
+        // text object, anything else cancels it (vi-style).
+        if let Some(Pending::TextObject { around }) = self.pending.take() {
+            match key.code {
+                Char('w') => self.apply_text_object(around, false),
+                Char('W') => self.apply_text_object(around, true),
+                _ => {}
+            }
+            return None;
+        }
         if key.modifiers.contains(KeyModifiers::ALT) {
             if let Char(c) = key.code {
                 if let Some(def) = patterns::by_key(c) {
@@ -338,6 +367,8 @@ impl App {
             }
         }
         match key.code {
+            Char('i') if !ctrl => self.pending = Some(Pending::TextObject { around: false }),
+            Char('a') if !ctrl => self.pending = Some(Pending::TextObject { around: true }),
             Char('p') if !ctrl => self.mode = Mode::PatternMenu,
             Char('q') if !ctrl => self.quit = true,
             Esc => {
@@ -719,6 +750,69 @@ mod tests {
         assert_eq!(a.cursor, Pos { row: 0, col: 4 });
         a.handle_key(key('N'));
         assert_eq!(a.cursor, Pos { row: 1, col: 4 });
+    }
+
+    #[test]
+    fn text_object_inner_word_selects_word() {
+        let mut a = app("foo bar baz");
+        a.handle_key(key('g'));
+        for _ in 0..5 {
+            a.handle_key(key('l'));
+        }
+        a.handle_key(key('i'));
+        a.handle_key(key('w'));
+        let eff = a.handle_key(key('y'));
+        assert_eq!(eff, Some(Effect::Copy("bar".into())));
+    }
+
+    #[test]
+    fn text_object_after_v_redefines_the_selection() {
+        let mut a = app("foo bar baz");
+        a.handle_key(key('g'));
+        for _ in 0..5 {
+            a.handle_key(key('l'));
+        }
+        a.handle_key(key('v'));
+        a.handle_key(key('i'));
+        a.handle_key(key('w'));
+        let eff = a.handle_key(key('y'));
+        assert_eq!(eff, Some(Effect::Copy("bar".into())));
+    }
+
+    #[test]
+    fn text_object_a_word_includes_trailing_space() {
+        let mut a = app("foo bar baz");
+        a.handle_key(key('g'));
+        for _ in 0..5 {
+            a.handle_key(key('l'));
+        }
+        a.handle_key(key('a'));
+        a.handle_key(key('w'));
+        let eff = a.handle_key(key('y'));
+        assert_eq!(eff, Some(Effect::Copy("bar ".into())));
+    }
+
+    #[test]
+    fn text_object_inner_big_word_spans_punct() {
+        let mut a = app("foo bar.baz qux");
+        a.handle_key(key('g'));
+        for _ in 0..5 {
+            a.handle_key(key('l'));
+        }
+        a.handle_key(key('i'));
+        a.handle_key(key('W'));
+        let eff = a.handle_key(key('y'));
+        assert_eq!(eff, Some(Effect::Copy("bar.baz".into())));
+    }
+
+    #[test]
+    fn incomplete_text_object_is_cancelled() {
+        let mut a = app("foo bar baz");
+        a.handle_key(key('i'));
+        // A non-object key cancels the pending object without quitting.
+        a.handle_key(key('z'));
+        assert!(a.sel.is_none());
+        assert!(!a.quit);
     }
 
     #[test]
