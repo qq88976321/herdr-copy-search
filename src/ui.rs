@@ -370,7 +370,10 @@ pub fn draw(out: &mut impl Write, app: &App) -> io::Result<()> {
 pub fn draw_extract(out: &mut impl Write, app: &ExtractApp, backdrop: &Buffer) -> io::Result<()> {
     if app.backdrop_rows > 0 {
         let content_rows = app.backdrop_rows - 1;
-        let start = backdrop.lines.len().saturating_sub(content_rows);
+        let start = backdrop
+            .lines
+            .len()
+            .saturating_sub(content_rows + app.backdrop_off);
         for y in 0..content_rows {
             queue!(out, MoveTo(0, y as u16), Clear(ClearType::CurrentLine))?;
             let row = start + y;

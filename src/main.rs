@@ -176,6 +176,7 @@ fn run_extract(app: &mut ExtractApp, backdrop: &Buffer) -> io::Result<Option<Ext
                     return Ok(Some(effect));
                 }
             }
+            Event::Mouse(m) => app.handle_mouse(m),
             Event::Resize(w, h) => app.set_size(w as usize, h as usize),
             _ => {}
         }
@@ -187,7 +188,7 @@ fn run_extract(app: &mut ExtractApp, backdrop: &Buffer) -> io::Result<Option<Ext
 }
 
 fn extract_mode(buf: &Buffer, height: u8, source_pane: Option<&str>) -> io::Result<()> {
-    let mut app = ExtractApp::new(&buf.text(), height);
+    let mut app = ExtractApp::new(&buf.text(), height, buf.lines.len());
     match run_extract(&mut app, buf)? {
         Some(ExtractEffect::Copy(text)) => {
             if osc52::emit(&text)? {

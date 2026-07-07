@@ -85,6 +85,7 @@ extract_height = 40
 | type / Backspace | edit the fuzzy query |
 | `Left/Right`, `Home/End`, `Delete` | move the cursor within the query (`ctrl+a/e` jump) |
 | `Up`/`Down`, `ctrl+p/n` | move the selection |
+| `PgUp/PgDn`, wheel over the backdrop | scroll the pane output above the popup (wheel over the list moves the selection) |
 | `Enter` | insert the pick into the source pane (`herdr pane send-text`) |
 | `Tab` | copy the pick via OSC 52 |
 | `ctrl+t` | toggle word / line granularity |

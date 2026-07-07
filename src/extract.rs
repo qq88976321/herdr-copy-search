@@ -1,5 +1,5 @@
 use crate::lineedit::LineEdit;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 
 /// Punctuation stripped from token edges; interior chars are kept so
 /// paths, URLs, and versions survive intact.
@@ -138,12 +138,16 @@ pub struct ExtractApp {
     pub view_cols: usize,
     /// Rows above the popup showing the pane backdrop.
     pub backdrop_rows: usize,
+    /// Total rows in the backdrop buffer, for scroll clamping.
+    backdrop_len: usize,
+    /// Rows the backdrop view is shifted up from the tail (0 = tail).
+    pub backdrop_off: usize,
     height_pct: u8,
     pub quit: bool,
 }
 
 impl ExtractApp {
-    pub fn new(text: &str, height_pct: u8) -> Self {
+    pub fn new(text: &str, height_pct: u8, backdrop_len: usize) -> Self {
         let mut app = ExtractApp {
             query: LineEdit::default(),
             granularity: Granularity::Word,
@@ -154,6 +158,8 @@ impl ExtractApp {
             view_rows: 1,
             view_cols: 80,
             backdrop_rows: 0,
+            backdrop_len,
+            backdrop_off: 0,
             height_pct: height_pct.clamp(1, 100),
             quit: false,
         };
@@ -166,6 +172,29 @@ impl ExtractApp {
         let (backdrop, list) = popup_layout(rows, self.height_pct);
         self.backdrop_rows = backdrop;
         self.view_rows = list;
+        if self.backdrop_rows == 0 {
+            self.backdrop_off = 0;
+        } else {
+            self.scroll_backdrop(0);
+        }
+    }
+
+    /// Backdrop rows that show content (its last row is the separator).
+    fn backdrop_content_rows(&self) -> usize {
+        self.backdrop_rows.saturating_sub(1)
+    }
+
+    /// Shift the backdrop view by `delta` rows (positive = older
+    /// output), clamped between the tail and the oldest read line.
+    pub fn scroll_backdrop(&mut self, delta: isize) {
+        if self.backdrop_rows == 0 {
+            return;
+        }
+        let max = self
+            .backdrop_len
+            .saturating_sub(self.backdrop_content_rows());
+        let off = self.backdrop_off as isize + delta;
+        self.backdrop_off = off.clamp(0, max as isize) as usize;
     }
 
     pub fn candidates(&self) -> &[String] {
@@ -201,6 +230,8 @@ impl ExtractApp {
             Char('n') if ctrl => self.move_selection(-1),
             Up => self.move_selection(1),
             Down => self.move_selection(-1),
+            PageUp => self.scroll_backdrop(self.backdrop_content_rows().max(1) as isize),
+            PageDown => self.scroll_backdrop(-(self.backdrop_content_rows().max(1) as isize)),
             Esc => {
                 if self.query.is_empty() {
                     self.quit = true;
@@ -238,6 +269,21 @@ impl ExtractApp {
         }
         let max = self.filtered.len() as isize - 1;
         self.selected = (self.selected as isize + delta).clamp(0, max) as usize;
+    }
+
+    /// Wheel over the backdrop scrolls it; over the popup it moves the
+    /// selection (up = older, same as the Up key).
+    pub fn handle_mouse(&mut self, ev: MouseEvent) {
+        let delta = match ev.kind {
+            MouseEventKind::ScrollUp => 1,
+            MouseEventKind::ScrollDown => -1,
+            _ => return,
+        };
+        if (ev.row as usize) < self.backdrop_rows {
+            self.scroll_backdrop(delta * 3);
+        } else {
+            self.move_selection(delta);
+        }
     }
 
     /// The window of `filtered` to display, keeping the selection
@@ -332,7 +378,7 @@ mod tests {
 
     #[test]
     fn typing_filters_and_enter_inserts_best_match() {
-        let mut a = ExtractApp::new("alpha\nbeta\ngamma", 100);
+        let mut a = ExtractApp::new("alpha\nbeta\ngamma", 100, 0);
         assert_eq!(a.selected_text(), Some("gamma"));
         a.handle_key(key('b'));
         a.handle_key(key('e'));
@@ -344,7 +390,7 @@ mod tests {
 
     #[test]
     fn tab_copies_selected() {
-        let mut a = ExtractApp::new("alpha\nbeta", 100);
+        let mut a = ExtractApp::new("alpha\nbeta", 100, 0);
         let eff = a.handle_key(code(KeyCode::Tab));
         assert_eq!(eff, Some(ExtractEffect::Copy("beta".into())));
         assert!(a.quit);
@@ -352,7 +398,7 @@ mod tests {
 
     #[test]
     fn ctrl_t_toggles_line_granularity() {
-        let mut a = ExtractApp::new("one two\nthree four", 100);
+        let mut a = ExtractApp::new("one two\nthree four", 100, 0);
         a.handle_key(ctrl('t'));
         assert_eq!(a.granularity, Granularity::Line);
         assert_eq!(a.selected_text(), Some("three four"));
@@ -360,7 +406,7 @@ mod tests {
 
     #[test]
     fn esc_clears_query_then_quits() {
-        let mut a = ExtractApp::new("alpha", 100);
+        let mut a = ExtractApp::new("alpha", 100, 0);
         a.handle_key(key('a'));
         a.handle_key(code(KeyCode::Esc));
         assert_eq!(a.query.text(), "");
@@ -371,7 +417,7 @@ mod tests {
 
     #[test]
     fn query_cursor_editing_refilters() {
-        let mut a = ExtractApp::new("beta\nbta", 100);
+        let mut a = ExtractApp::new("beta\nbta", 100, 0);
         a.handle_key(key('b'));
         a.handle_key(key('t'));
         a.handle_key(key('a'));
@@ -384,8 +430,73 @@ mod tests {
     }
 
     #[test]
+    fn backdrop_scroll_clamps_to_history() {
+        let mut a = ExtractApp::new("x", 40, 50);
+        // popup_layout(30, 40) = (18, 11): 17 backdrop content rows.
+        a.set_size(80, 30);
+        a.scroll_backdrop(3);
+        assert_eq!(a.backdrop_off, 3);
+        a.scroll_backdrop(1000);
+        assert_eq!(a.backdrop_off, 33, "oldest read line stays on screen");
+        a.scroll_backdrop(-1000);
+        assert_eq!(a.backdrop_off, 0);
+    }
+
+    #[test]
+    fn backdrop_scroll_noop_without_backdrop_or_history() {
+        let mut a = ExtractApp::new("x", 100, 50);
+        a.set_size(80, 30); // full-height popup: no backdrop
+        a.scroll_backdrop(5);
+        assert_eq!(a.backdrop_off, 0);
+        let mut b = ExtractApp::new("x", 40, 10);
+        b.set_size(80, 30); // 17 content rows already show all 10 lines
+        b.scroll_backdrop(5);
+        assert_eq!(b.backdrop_off, 0);
+    }
+
+    #[test]
+    fn page_keys_scroll_the_backdrop() {
+        let mut a = ExtractApp::new("x", 40, 100);
+        a.set_size(80, 30);
+        a.handle_key(code(KeyCode::PageUp));
+        assert_eq!(a.backdrop_off, 17);
+        a.handle_key(code(KeyCode::PageDown));
+        assert_eq!(a.backdrop_off, 0);
+    }
+
+    #[test]
+    fn resize_reclamps_the_backdrop_offset() {
+        let mut a = ExtractApp::new("x", 40, 20);
+        a.set_size(80, 30); // 17 content rows: max offset 3
+        a.scroll_backdrop(1000);
+        assert_eq!(a.backdrop_off, 3);
+        a.set_size(80, 40); // 23 content rows already show everything
+        assert_eq!(a.backdrop_off, 0);
+    }
+
+    #[test]
+    fn wheel_scrolls_backdrop_or_selection_by_region() {
+        let mut a = ExtractApp::new("one\ntwo\nthree\nfour", 40, 100);
+        a.set_size(80, 30); // backdrop rows 0..18, popup below
+        let wheel = |row: u16, kind| MouseEvent {
+            kind,
+            column: 0,
+            row,
+            modifiers: KeyModifiers::NONE,
+        };
+        a.handle_mouse(wheel(0, MouseEventKind::ScrollUp));
+        assert_eq!(a.backdrop_off, 3);
+        a.handle_mouse(wheel(0, MouseEventKind::ScrollDown));
+        assert_eq!(a.backdrop_off, 0);
+        a.handle_mouse(wheel(20, MouseEventKind::ScrollUp));
+        assert_eq!(a.selected, 1);
+        a.handle_mouse(wheel(20, MouseEventKind::ScrollDown));
+        assert_eq!(a.selected, 0);
+    }
+
+    #[test]
     fn selection_moves_within_bounds_and_window_follows() {
-        let mut a = ExtractApp::new("one\ntwo\nthree\nfour", 100);
+        let mut a = ExtractApp::new("one\ntwo\nthree\nfour", 100, 0);
         a.set_size(80, 3); // 2 content rows
         assert_eq!(a.filtered.len(), 4);
         a.handle_key(code(KeyCode::Up));
