@@ -10,8 +10,11 @@ from `../agent-os/INDEX.md`. This file only adds repo-specific facts.
 
 ## Quick facts (verified 2026-07-07)
 
-- Local-only repo: NO remote, branch `master`, tags like `v0.1.1`.
-  There is no CI; the local gate below is the entire gate.
+- Local-only repo: NO remote yet, branch `master`, tags like
+  `v0.1.1`. Publishing is planned (docs/checklists/CL-01); until the
+  first push, the local gate below is the entire gate and the
+  .github/workflows/ and demo/ files are authored-but-UNVERIFIED
+  scaffolding (each carries a STATUS header naming its checklist).
 - Toolchain: `cargo` from rustup (`~/.cargo/bin/cargo`), `just` via
   mise. Rust edition 2021. Only 4 crates: base64, crossterm, regex,
   unicode-width. Do not add dependencies without user confirmation.
@@ -34,6 +37,18 @@ just release   # cargo-release: bump, sync manifest, commit, tag.
                #   USER-ONLY: run it only when the user asks for a
                #   release. It creates a commit and a local tag.
 ```
+
+## Docs map
+
+- docs/ROADMAP.md - evidence-based roadmap (researched 2026-07-07),
+  feature ranking, upstream-blocked items, ARCHIVE CONDITIONS. Pick
+  work from here; keep item statuses current.
+- docs/checklists/CL-01..CL-07 - literal procedures: publish, CI
+  verification, releases, demo recording (vhs), lints/MSRV, the
+  feature dev loop, upstream watch. Follow them exactly.
+- docs/upstream-log.md - dated CL-07 run log; append, never rewrite.
+- demo/*.tape - vhs scripts that regenerate the README GIFs; any
+  rendering or keybinding change must regenerate GIFs (CL-04).
 
 ## Module map (src/)
 
