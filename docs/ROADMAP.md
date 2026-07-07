@@ -67,7 +67,7 @@ clean exit.
 |----|------|--------|---------|-----------|
 | P1.1 | [~] CI pipeline (authored, UNVERIFIED) | S | P0.1 | CL-02 |
 | P1.2 | [~] Release artifacts workflow (authored, UNVERIFIED) | S | P1.1 | CL-03 |
-| P1.3 | [~] Lints + MSRV (lints added; MSRV unverified) | S | - | CL-05 |
+| P1.3 | [~] Lints + MSRV (MSRV 1.74 verified locally; CI job pending P1.1) | S | - | CL-05 |
 | P1.4 | [~] Reproducible README demos (tapes authored, UNVERIFIED) | M | - | CL-04 |
 | P1.5 | [x] Dev process documented | S | - | CL-06 |
 
