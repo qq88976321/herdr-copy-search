@@ -88,7 +88,18 @@ against herdr 0.7.1 on 2026-07-06/07. Trust them over intuition.
   the process must sleep ~200ms before exiting or the write is lost
   (osc52.rs implements this grace period - keep it).
 - `herdr plugin pane open --target-pane X` is rejected for
-  placement=overlay; overlays always cover the focused pane.
+  placement=overlay. A plugin overlay renders FULL-WINDOW, not confined
+  to the focused pane's rect: `--placement overlay` and `zoomed` look
+  identical (TTY-verified 2026-07-07). No pane-scoped floating overlay
+  exists in 0.7.1; `split`/`tab` open a separate pane/tab instead. The
+  opening view is anchored to the source pane's visible screen so it
+  still LOOKS in-place.
+- Pane borders are one global boolean: `[ui] pane_borders` (default
+  true) draws split-pane dividers AND the frame around the plugin
+  overlay; `false` removes both (no thin-line or overlay-only middle
+  ground; `[theme] accent` only colors the border when on). A
+  borderless in-place look needs pane_borders=false, which best suits
+  one-pane-per-tab layouts.
 - `herdr pane send-keys` rejects pageup/pagedown names; send raw
   sequences via `send-text "$(printf '\033[5~')"` (5=PgUp, 6=PgDn).
   Two esc keys sent back-to-back may be parsed as one.

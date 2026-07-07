@@ -236,8 +236,12 @@ Unblock triggers (checked by CL-07):
   conditions instead
 - a copy-mode extension/override API ships -> port this plugin's
   search into it (major version)
-- floating/popup plugin surfaces ship (upstream #785, #812) -> minor
-  UX win for extract mode
+- floating/popup plugin surfaces ship (upstream #785, #812) -> the real
+  fix here: today a plugin overlay renders full-window (`--placement`
+  overlay == zoomed, verified 2026-07-07), so search cannot open inside
+  just the current pane. A pane-scoped floating surface would confine it
+  to the focused pane and drop the herdr frame without the global
+  pane_borders=false. UX win for extract too.
 
 ## Continuous - upstream watch
 
