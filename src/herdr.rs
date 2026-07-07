@@ -51,6 +51,12 @@ impl Herdr {
         self.read(pane, lines, "recent", "ansi")
     }
 
+    /// The pane's current screen as plain text rows (wrapped at the
+    /// pane width; the server trims trailing blank rows).
+    pub fn pane_read_visible(&self, pane: &str, lines: usize) -> io::Result<String> {
+        self.read(pane, lines, "visible", "text")
+    }
+
     /// Type `text` into a pane, as if entered at its terminal.
     pub fn send_text(&self, pane: &str, text: &str) -> io::Result<()> {
         let out = Command::new(&self.bin)

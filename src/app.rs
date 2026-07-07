@@ -43,10 +43,15 @@ pub struct App {
     drag_origin: Option<Pos>,
     saved_pattern: String,
     pending_bottom: bool,
+    /// Rows the source pane was showing when captured. The bottom-most
+    /// view keeps exactly this many tail rows on screen, so opening
+    /// the overlay does not move the content and scrolling back down
+    /// restores the original screen (None: fill the view, dev inputs).
+    screen_rows: Option<usize>,
 }
 
 impl App {
-    pub fn new(buf: Buffer, start_search: bool) -> Self {
+    pub fn new(buf: Buffer, start_search: bool, screen_rows: Option<usize>) -> Self {
         let cursor = Pos {
             row: buf.last_row(),
             col: 0,
@@ -77,6 +82,7 @@ impl App {
             drag_origin: None,
             saved_pattern: String::new(),
             pending_bottom: true,
+            screen_rows,
         }
     }
 
@@ -100,10 +106,16 @@ impl App {
         (self.view_rows - 1).max(1)
     }
 
+    /// Top row of the bottom-most view. Anchored to the rows the
+    /// source pane was showing, so content that sat at the top of a
+    /// partly filled screen stays there instead of being pulled down.
     fn max_top(&self) -> usize {
-        self.buf
-            .last_row()
-            .saturating_sub(self.content_rows().saturating_sub(1))
+        let anchor = self
+            .screen_rows
+            .unwrap_or(usize::MAX)
+            .min(self.content_rows())
+            .max(1);
+        self.buf.last_row().saturating_sub(anchor - 1)
     }
 
     fn ensure_visible(&mut self) {
@@ -547,7 +559,7 @@ mod tests {
     }
 
     fn app(text: &str) -> App {
-        let mut a = App::new(Buffer::from_text(text), false);
+        let mut a = App::new(Buffer::from_text(text), false, None);
         a.set_size(80, 11); // 10 content rows + status
         a
     }
@@ -712,16 +724,46 @@ mod tests {
     #[test]
     fn view_reserves_the_mode_row() {
         let text = (0..30).map(|i| format!("l{i}\n")).collect::<String>();
-        let mut a = App::new(Buffer::from_text(&text), false);
+        let mut a = App::new(Buffer::from_text(&text), false, None);
         a.set_size(80, 10);
         assert_eq!(a.view_rows, 10);
         assert_eq!(a.top, 21, "bottom row is the persistent mode row");
     }
 
     #[test]
+    fn screen_rows_anchor_the_opening_view() {
+        let text = (0..30).map(|i| format!("l{i}\n")).collect::<String>();
+        let mut a = App::new(Buffer::from_text(&text), false, Some(4));
+        a.set_size(80, 10);
+        // The 4 rows the pane showed keep their top-of-screen spot;
+        // the rows below stay blank like on the real screen.
+        assert_eq!(a.top, 26);
+        assert_eq!(a.cursor.row, 29);
+        // The wheel cannot scroll below the original screen.
+        let wheel = |kind| MouseEvent {
+            kind,
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        };
+        a.handle_mouse(wheel(MouseEventKind::ScrollDown));
+        assert_eq!(a.top, 26);
+        a.handle_mouse(wheel(MouseEventKind::ScrollUp));
+        assert_eq!(a.top, 23, "scrolling up into history is free");
+    }
+
+    #[test]
+    fn full_screen_capture_fills_the_view() {
+        let text = (0..30).map(|i| format!("l{i}\n")).collect::<String>();
+        let mut a = App::new(Buffer::from_text(&text), false, Some(10));
+        a.set_size(80, 10);
+        assert_eq!(a.top, 21, "anchor clamps to the content rows");
+    }
+
+    #[test]
     fn search_hits_stay_above_the_mode_row() {
         let text = (0..30).map(|i| format!("l{i}\n")).collect::<String>();
-        let mut a = App::new(Buffer::from_text(&text), false);
+        let mut a = App::new(Buffer::from_text(&text), false, None);
         a.set_size(80, 10);
         a.handle_key(key('/'));
         for c in "l29".chars() {

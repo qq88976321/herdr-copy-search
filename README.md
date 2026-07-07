@@ -129,6 +129,11 @@ synced automatically.
   holding the prompt, pattern menu, and messages, like herdr's native
   copy mode; match counts and the cursor position stay in the
   tmux-style top-right indicator.
+- Opening the overlay keeps the source pane's screen in place: a third
+  `visible` read anchors the bottom-most view to the rows the pane was
+  showing, so a partly filled screen stays at the top with blank rows
+  below and scrolling back down restores the original screen. When the
+  pane changes between reads, the anchor degrades to tail alignment.
 - No serde or toml crates: herdr's context JSON and the plugin config
   are flat, so small string-field extractors are enough.
 - Extract mode follows extrakto's convention (Enter inserts, Tab

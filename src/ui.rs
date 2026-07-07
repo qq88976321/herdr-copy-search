@@ -472,7 +472,7 @@ mod tests {
     }
 
     fn app(text: &str) -> App {
-        let mut a = App::new(Buffer::from_text(text), false);
+        let mut a = App::new(Buffer::from_text(text), false, None);
         a.set_size(80, 11);
         a
     }
@@ -535,7 +535,7 @@ mod tests {
     }
 
     fn styled_app(ansi_text: &str) -> App {
-        let mut a = App::new(Buffer::from_ansi(ansi_text), false);
+        let mut a = App::new(Buffer::from_ansi(ansi_text), false, None);
         a.set_size(80, 11);
         a
     }

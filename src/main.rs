@@ -75,28 +75,53 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Cli, String> {
 
 /// Input order: explicit file, then a herdr source pane, then piped
 /// stdin (dev use; crossterm reads events from /dev/tty instead).
-/// The herdr path reads twice: logical text for search/yank/tokens and
-/// styled wrapped rows for display, composed by Buffer::from_reads.
-fn acquire_buffer(cli: &Cli, source_pane: Option<&str>) -> io::Result<Buffer> {
+/// The herdr path reads three times: logical text for search/yank/
+/// tokens, styled wrapped rows for display (composed by
+/// Buffer::from_reads), and the visible screen so the opening view
+/// can keep the pane content in place (None outside herdr).
+fn acquire_buffer(cli: &Cli, source_pane: Option<&str>) -> io::Result<(Buffer, Option<usize>)> {
     if let Some(path) = &cli.input {
-        return Ok(Buffer::from_ansi(&std::fs::read_to_string(path)?));
+        return Ok((Buffer::from_ansi(&std::fs::read_to_string(path)?), None));
     }
     if let Some(pane) = source_pane {
         let herdr = Herdr::from_env();
         let unwrapped = herdr.pane_read(pane, cli.lines)?;
         let wrapped_ansi = herdr.pane_read_ansi(pane, cli.lines).unwrap_or_default();
         if wrapped_ansi.trim().is_empty() {
-            return Ok(Buffer::from_text(&unwrapped));
+            return Ok((Buffer::from_text(&unwrapped), None));
         }
-        return Ok(Buffer::from_reads(&unwrapped, &wrapped_ansi));
+        let buf = Buffer::from_reads(&unwrapped, &wrapped_ansi);
+        let visible = herdr.pane_read_visible(pane, cli.lines).unwrap_or_default();
+        let rows = screen_rows(&buf, &visible);
+        return Ok((buf, rows));
     }
     let stdin = io::stdin();
     if !stdin.is_terminal() {
-        return Ok(Buffer::from_ansi(&io::read_to_string(stdin)?));
+        return Ok((Buffer::from_ansi(&io::read_to_string(stdin)?), None));
     }
     Err(io::Error::other(
         "no input: pass --input FILE, run inside herdr, or pipe text on stdin",
     ))
+}
+
+/// Rows of the source pane's screen, verified against the buffer: the
+/// visible read must equal the buffer tail row by row (modulo trailing
+/// whitespace). None when they do not line up (the pane changed
+/// between reads, or rows come from an unwrapped fallback), so the
+/// opening view falls back to filling the screen with the tail.
+fn screen_rows(buf: &Buffer, visible: &str) -> Option<usize> {
+    let rows: Vec<&str> = visible.lines().collect();
+    let n = rows.len();
+    if n == 0 || n > buf.lines.len() {
+        return None;
+    }
+    let start = buf.lines.len() - n;
+    for (i, want) in rows.iter().enumerate() {
+        if buf.lines[start + i].text().trim_end() != want.trim_end() {
+            return None;
+        }
+    }
+    Some(n)
 }
 
 /// Run the interactive loop; returns whether anything was copied so the
@@ -180,8 +205,8 @@ fn extract_mode(buf: &Buffer, height: u8, source_pane: Option<&str>) -> io::Resu
     Ok(())
 }
 
-fn copy_mode(buf: Buffer, start_search: bool) -> io::Result<()> {
-    let mut app = App::new(buf, start_search);
+fn copy_mode(buf: Buffer, start_search: bool, screen_rows: Option<usize>) -> io::Result<()> {
+    let mut app = App::new(buf, start_search, screen_rows);
     if run(&mut app)? {
         std::thread::sleep(osc52::FORWARD_GRACE);
     }
@@ -199,8 +224,8 @@ fn main() -> ExitCode {
     let source_pane = herdr::resolve_source_pane(cli.pane.as_deref(), |k| {
         std::env::var(k).ok().filter(|v| !v.is_empty())
     });
-    let buf = match acquire_buffer(&cli, source_pane.as_deref()) {
-        Ok(buf) => buf,
+    let (buf, screen_rows) = match acquire_buffer(&cli, source_pane.as_deref()) {
+        Ok(acquired) => acquired,
         Err(e) => {
             eprintln!("herdr-copy-search: {e}\n{USAGE}");
             return ExitCode::FAILURE;
@@ -211,8 +236,8 @@ fn main() -> ExitCode {
     });
     let result = match cli.mode {
         RunMode::Extract => extract_mode(&buf, height, source_pane.as_deref()),
-        RunMode::Copy => copy_mode(buf, false),
-        RunMode::Search => copy_mode(buf, true),
+        RunMode::Copy => copy_mode(buf, false, screen_rows),
+        RunMode::Search => copy_mode(buf, true, screen_rows),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -260,5 +285,30 @@ mod tests {
         assert!(parse(&["--mode", "bogus"]).is_err());
         assert!(parse(&["--mode"]).is_err());
         assert!(parse(&["--lines", "abc"]).is_err());
+    }
+
+    #[test]
+    fn screen_rows_verifies_the_buffer_tail() {
+        let buf = Buffer::from_text("a\nb\nc\nd");
+        assert_eq!(screen_rows(&buf, "c\nd"), Some(2));
+        assert_eq!(screen_rows(&buf, "a\nb\nc\nd"), Some(4));
+        assert_eq!(
+            screen_rows(&buf, "x\nd"),
+            None,
+            "pane changed between reads"
+        );
+        assert_eq!(screen_rows(&buf, ""), None);
+    }
+
+    #[test]
+    fn screen_rows_ignores_trailing_whitespace() {
+        let buf = Buffer::from_text("a  \nb");
+        assert_eq!(screen_rows(&buf, "a\nb   "), Some(2));
+    }
+
+    #[test]
+    fn screen_rows_rejects_more_rows_than_the_buffer() {
+        let buf = Buffer::from_text("a");
+        assert_eq!(screen_rows(&buf, "a\nb"), None);
     }
 }
