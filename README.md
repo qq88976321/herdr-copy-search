@@ -5,6 +5,18 @@ pane scrollback, plus tmux-copycat-style predefined pattern search and
 extrakto-style token extraction. All copying goes through OSC 52, so it
 works over SSH without any clipboard helper on the remote host.
 
+herdr has a native copy mode but no scrollback search yet (see
+upstream [discussion #563](https://github.com/ogulcancelik/herdr/discussions/563));
+this plugin fills that gap until it lands natively - the planned exit
+is written down in [docs/ROADMAP.md](docs/ROADMAP.md).
+
+## Status
+
+Personal tool, built with heavy AI assistance (Claude Code). I review
+what ships and use it daily over SSH, but it comes with no warranty
+and no support commitment: issues and PRs are welcome and may still
+go unanswered. Expect tmux-like behavior, not tmux-grade maturity.
+
 ## Install
 
 ```sh
@@ -106,6 +118,13 @@ Outside herdr you can also pipe text on stdin; key events then come
 from `/dev/tty`. Releases are local-only (`cargo-release` with
 `publish = false`, `push = false`); `herdr-plugin.toml` is version-
 synced automatically.
+
+Where things are headed and how work gets done here:
+[docs/ROADMAP.md](docs/ROADMAP.md) (evidence-based roadmap, archive
+conditions) and [docs/checklists/](docs/checklists/) (step-by-step
+procedures: publishing, CI, releases, demo recording, feature loop,
+upstream watch). README demo GIFs are scripted in [demo/](demo/) as
+vhs tapes so they can be regenerated after any UI change.
 
 ## Design notes
 
