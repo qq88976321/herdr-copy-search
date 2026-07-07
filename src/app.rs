@@ -1,4 +1,5 @@
 use crate::buffer::{Buffer, Pos};
+use crate::lineedit::LineEdit;
 use crate::motion;
 use crate::patterns::{self, PatternDef};
 use crate::search::{Direction, Search};
@@ -8,7 +9,7 @@ pub enum Mode {
     Normal,
     Prompt {
         direction: Direction,
-        input: String,
+        input: LineEdit,
         origin: Pos,
         origin_top: usize,
     },
@@ -53,7 +54,7 @@ impl App {
         let mode = if start_search {
             Mode::Prompt {
                 direction: Direction::Forward,
-                input: String::new(),
+                input: LineEdit::default(),
                 origin: cursor,
                 origin_top: 0,
             }
@@ -246,7 +247,7 @@ impl App {
         self.saved_pattern = self.search.pattern.clone();
         self.mode = Mode::Prompt {
             direction,
-            input: String::new(),
+            input: LineEdit::default(),
             origin: self.cursor,
             origin_top: self.top,
         };
@@ -439,7 +440,6 @@ impl App {
         else {
             return;
         };
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
             Esc => {
                 // Cancel: restore view and the previous search highlights.
@@ -466,36 +466,34 @@ impl App {
                         None => self.message = Some(format!("no match: {}", saved)),
                     }
                 } else if self.search.matches.is_empty() {
-                    self.message = Some(format!("no match: {}", input));
+                    self.message = Some(format!("no match: {}", input.text()));
                 }
                 return;
             }
-            Char('u') if ctrl => input.clear(),
-            Backspace => {
-                if input.is_empty() {
-                    self.cursor = origin;
-                    self.top = origin_top;
-                    let saved = self.saved_pattern.clone();
-                    let dir = self.search.direction.unwrap_or(direction);
-                    self.search.run(&self.buf, &saved, dir);
+            Backspace if input.is_empty() => {
+                // Backspace on an empty prompt closes it, tmux-style.
+                self.cursor = origin;
+                self.top = origin_top;
+                let saved = self.saved_pattern.clone();
+                let dir = self.search.direction.unwrap_or(direction);
+                self.search.run(&self.buf, &saved, dir);
+                return;
+            }
+            _ => {
+                if !input.handle_key(key) {
+                    self.mode = Mode::Prompt {
+                        direction,
+                        input,
+                        origin,
+                        origin_top,
+                    };
                     return;
                 }
-                input.pop();
-            }
-            Char(c) if !ctrl => input.push(c),
-            _ => {
-                self.mode = Mode::Prompt {
-                    direction,
-                    input,
-                    origin,
-                    origin_top,
-                };
-                return;
             }
         }
         // Restore the prompt before jumping so the reserved bottom row
         // is accounted for while scrolling to the incremental hit.
-        let query = input.clone();
+        let query = input.text();
         self.mode = Mode::Prompt {
             direction,
             input,
@@ -644,6 +642,39 @@ mod tests {
         a.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         a.handle_key(key('n'));
         assert_eq!(a.cursor.row, 0);
+    }
+
+    #[test]
+    fn prompt_left_arrow_edits_mid_query() {
+        let mut a = app("alpha\nbeta\ngamma");
+        a.handle_key(key('/'));
+        for c in "bta".chars() {
+            a.handle_key(key(c));
+        }
+        // No match yet: the view stays at the origin.
+        assert_eq!(a.cursor.row, 2);
+        let left = KeyEvent::new(KeyCode::Left, KeyModifiers::NONE);
+        a.handle_key(left);
+        a.handle_key(left);
+        a.handle_key(key('e'));
+        assert_eq!(a.cursor, Pos { row: 1, col: 0 });
+        let Mode::Prompt { input, .. } = &a.mode else {
+            panic!("prompt should stay open");
+        };
+        assert_eq!(input.text(), "beta");
+    }
+
+    #[test]
+    fn prompt_home_and_delete_edit_the_query() {
+        let mut a = app("xfoo\nfoo");
+        a.handle_key(key('/'));
+        for c in "xfoo".chars() {
+            a.handle_key(key(c));
+        }
+        a.handle_key(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
+        a.handle_key(KeyEvent::new(KeyCode::Delete, KeyModifiers::NONE));
+        assert_eq!(a.search.pattern, "foo");
+        assert_eq!(a.search.matches.len(), 2);
     }
 
     fn alt(c: char) -> KeyEvent {

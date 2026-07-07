@@ -2,6 +2,7 @@ use crate::ansi;
 use crate::app::{App, Mode, SelKind};
 use crate::buffer::{Buffer, Pos};
 use crate::extract::{ExtractApp, Granularity};
+use crate::lineedit::LineEdit;
 use crate::search::Direction;
 use crossterm::cursor::{Hide, MoveTo, Show};
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
@@ -132,21 +133,11 @@ pub fn clip_spans<K: Copy + PartialEq>(
     out
 }
 
-/// Transient bottom-row overlay: Some while a prompt, the pattern
-/// menu, or a message is showing; None otherwise so the content keeps
-/// the row (tmux behavior). Committed searches do not hold the row;
-/// their summary lives in the top-right indicator.
+/// Transient bottom-row overlay: Some while the pattern menu or a
+/// message is showing; None otherwise so the content keeps the row
+/// (tmux behavior). The prompt renders separately via line_edit_spans;
+/// committed searches live in the top-right indicator.
 pub fn bottom_overlay(app: &App) -> Option<String> {
-    if let Mode::Prompt {
-        direction, input, ..
-    } = &app.mode
-    {
-        let c = match direction {
-            Direction::Forward => '/',
-            Direction::Backward => '?',
-        };
-        return Some(format!("{c}{input}"));
-    }
     if matches!(app.mode, Mode::PatternMenu) {
         return Some(crate::patterns::menu_line());
     }
@@ -246,6 +237,66 @@ fn truncate_to_width(mut text: String, cols: usize) -> String {
     text
 }
 
+/// Spans (reverse-video?, text) for a one-line prompt: the prefix and
+/// the text around the cursor, with the cursor cell (the char under
+/// it, or a trailing space) in reverse video. Text left of the cursor
+/// is trimmed from its start so the cursor always stays on screen.
+pub fn line_edit_spans(prefix: &str, le: &LineEdit, cols: usize) -> Vec<(bool, String)> {
+    let cell = |c: char| c.width().unwrap_or(0).max(1);
+    let pw: usize = prefix.chars().map(cell).sum();
+    let cursor = le.under().unwrap_or(' ');
+    if pw + cell(cursor) > cols {
+        return vec![(false, truncate_to_width(prefix.to_string(), cols))];
+    }
+    let mut avail = cols - pw - cell(cursor);
+    let mut before: Vec<char> = Vec::new();
+    for c in le.before_text().chars().rev() {
+        if cell(c) > avail {
+            break;
+        }
+        avail -= cell(c);
+        before.push(c);
+    }
+    let before: String = before.into_iter().rev().collect();
+    let mut after = String::new();
+    for c in le.after_text().chars() {
+        if cell(c) > avail {
+            break;
+        }
+        avail -= cell(c);
+        after.push(c);
+    }
+    let mut spans = vec![
+        (false, format!("{prefix}{before}")),
+        (true, cursor.to_string()),
+    ];
+    if !after.is_empty() {
+        spans.push((false, after));
+    }
+    spans
+}
+
+fn print_line_edit(
+    out: &mut impl Write,
+    prefix: &str,
+    le: &LineEdit,
+    cols: usize,
+) -> io::Result<()> {
+    for (reverse, text) in line_edit_spans(prefix, le, cols) {
+        if reverse {
+            queue!(
+                out,
+                SetAttribute(Attribute::Reverse),
+                crossterm::style::Print(text),
+                SetAttribute(Attribute::Reset)
+            )?;
+        } else {
+            queue!(out, crossterm::style::Print(text))?;
+        }
+    }
+    Ok(())
+}
+
 /// Draw the whole screen: content rows then the bottom line.
 pub fn draw(out: &mut impl Write, app: &App) -> io::Result<()> {
     for y in 0..app.view_rows {
@@ -273,7 +324,21 @@ pub fn draw(out: &mut impl Write, app: &App) -> io::Result<()> {
         )?;
     }
     // Transient bottom overlay (prompt, pattern menu, message).
-    if let Some(text) = bottom_overlay(app) {
+    if let Mode::Prompt {
+        direction, input, ..
+    } = &app.mode
+    {
+        queue!(
+            out,
+            MoveTo(0, (app.view_rows - 1) as u16),
+            Clear(ClearType::CurrentLine)
+        )?;
+        let prefix = match direction {
+            Direction::Forward => "/",
+            Direction::Backward => "?",
+        };
+        print_line_edit(out, prefix, input, app.view_cols)?;
+    } else if let Some(text) = bottom_overlay(app) {
         queue!(
             out,
             MoveTo(0, (app.view_rows - 1) as u16),
@@ -281,14 +346,6 @@ pub fn draw(out: &mut impl Write, app: &App) -> io::Result<()> {
         )?;
         let text = truncate_to_width(text, app.view_cols);
         queue!(out, crossterm::style::Print(&text))?;
-        if matches!(app.mode, Mode::Prompt { .. }) {
-            queue!(
-                out,
-                SetAttribute(Attribute::Reverse),
-                crossterm::style::Print(" "),
-                SetAttribute(Attribute::Reset)
-            )?;
-        }
     }
     out.flush()
 }
@@ -352,15 +409,8 @@ pub fn draw_extract(out: &mut impl Write, app: &ExtractApp, backdrop: &Buffer) -
         Granularity::Word => "word",
         Granularity::Line => "line",
     };
-    let prompt = format!("[{badge}] {}> {}", app.filtered.len(), app.query);
-    let prompt = truncate_to_width(prompt, app.view_cols);
-    queue!(
-        out,
-        crossterm::style::Print(&prompt),
-        SetAttribute(Attribute::Reverse),
-        crossterm::style::Print(" "),
-        SetAttribute(Attribute::Reset)
-    )?;
+    let prefix = format!("[{badge}] {}> ", app.filtered.len());
+    print_line_edit(out, &prefix, &app.query, app.view_cols)?;
     out.flush()
 }
 
@@ -534,14 +584,74 @@ mod tests {
     }
 
     #[test]
-    fn overlay_shows_prompt_then_yields_row_back() {
+    fn prompt_spans_show_cursor_then_row_yields_back() {
         let mut a = app("foo bar");
         a.handle_key(key('/'));
         a.handle_key(key('b'));
-        assert_eq!(bottom_overlay(&a).as_deref(), Some("/b"));
+        let Mode::Prompt { input, .. } = &a.mode else {
+            panic!("prompt should be open");
+        };
+        assert_eq!(
+            line_edit_spans("/", input, 80),
+            vec![(false, "/b".into()), (true, " ".into())]
+        );
         a.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert_eq!(bottom_overlay(&a), None);
         assert_eq!(indicator(&a), "/b [1/1] [1/1]");
+    }
+
+    fn line_edit(text: &str, left: usize) -> LineEdit {
+        let mut le = LineEdit::default();
+        for c in text.chars() {
+            le.insert(c);
+        }
+        for _ in 0..left {
+            le.left();
+        }
+        le
+    }
+
+    #[test]
+    fn line_edit_spans_mark_the_char_under_the_cursor() {
+        assert_eq!(
+            line_edit_spans("/", &line_edit("abc", 2), 80),
+            vec![
+                (false, "/a".into()),
+                (true, "b".into()),
+                (false, "c".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn line_edit_spans_trim_the_left_to_keep_the_cursor_visible() {
+        assert_eq!(
+            line_edit_spans("/", &line_edit("abcdef", 0), 5),
+            vec![(false, "/def".into()), (true, " ".into())]
+        );
+    }
+
+    #[test]
+    fn line_edit_spans_clip_the_tail_after_the_cursor() {
+        assert_eq!(
+            line_edit_spans("/", &line_edit("abcdef", 6), 5),
+            vec![
+                (false, "/".into()),
+                (true, "a".into()),
+                (false, "bcd".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn line_edit_spans_handle_wide_chars() {
+        // Each CJK char is 2 cells; cols 4 fits the prefix, one char,
+        // and the cursor cell.
+        let wide = "\u{4e2d}\u{6587}";
+        assert_eq!(
+            line_edit_spans("/", &line_edit(wide, 0), 4),
+            vec![(false, "/\u{6587}".into()), (true, " ".into())]
+        );
     }
 
     #[test]

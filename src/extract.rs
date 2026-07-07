@@ -1,3 +1,4 @@
+use crate::lineedit::LineEdit;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Punctuation stripped from token edges; interior chars are kept so
@@ -124,7 +125,7 @@ pub fn popup_layout(rows: usize, pct: u8) -> (usize, usize) {
 /// extrakto-style token picker: type to fuzzy-filter, Enter inserts
 /// into the source pane, Tab copies via OSC 52.
 pub struct ExtractApp {
-    pub query: String,
+    pub query: LineEdit,
     pub granularity: Granularity,
     words: Vec<String>,
     lines: Vec<String>,
@@ -144,7 +145,7 @@ pub struct ExtractApp {
 impl ExtractApp {
     pub fn new(text: &str, height_pct: u8) -> Self {
         let mut app = ExtractApp {
-            query: String::new(),
+            query: LineEdit::default(),
             granularity: Granularity::Word,
             words: tokenize_words(text, MIN_TOKEN_LEN),
             lines: tokenize_lines(text),
@@ -180,7 +181,7 @@ impl ExtractApp {
     }
 
     fn refilter(&mut self) {
-        self.filtered = rank(&self.query, self.candidates());
+        self.filtered = rank(&self.query.text(), self.candidates());
         self.selected = 0;
     }
 
@@ -189,10 +190,6 @@ impl ExtractApp {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
             Char('c') if ctrl => self.quit = true,
-            Char('u') if ctrl => {
-                self.query.clear();
-                self.refilter();
-            }
             Char('t') if ctrl => {
                 self.granularity = match self.granularity {
                     Granularity::Word => Granularity::Line,
@@ -204,14 +201,6 @@ impl ExtractApp {
             Char('n') if ctrl => self.move_selection(-1),
             Up => self.move_selection(1),
             Down => self.move_selection(-1),
-            Char(c) if !ctrl => {
-                self.query.push(c);
-                self.refilter();
-            }
-            Backspace => {
-                self.query.pop();
-                self.refilter();
-            }
             Esc => {
                 if self.query.is_empty() {
                     self.quit = true;
@@ -234,7 +223,11 @@ impl ExtractApp {
                     return Some(ExtractEffect::Copy(text));
                 }
             }
-            _ => {}
+            _ => {
+                if self.query.handle_key(key) {
+                    self.refilter();
+                }
+            }
         }
         None
     }
@@ -370,10 +363,24 @@ mod tests {
         let mut a = ExtractApp::new("alpha", 100);
         a.handle_key(key('a'));
         a.handle_key(code(KeyCode::Esc));
-        assert_eq!(a.query, "");
+        assert_eq!(a.query.text(), "");
         assert!(!a.quit);
         a.handle_key(code(KeyCode::Esc));
         assert!(a.quit);
+    }
+
+    #[test]
+    fn query_cursor_editing_refilters() {
+        let mut a = ExtractApp::new("beta\nbta", 100);
+        a.handle_key(key('b'));
+        a.handle_key(key('t'));
+        a.handle_key(key('a'));
+        assert_eq!(a.selected_text(), Some("bta"));
+        a.handle_key(code(KeyCode::Left));
+        a.handle_key(code(KeyCode::Left));
+        a.handle_key(key('e'));
+        assert_eq!(a.query.text(), "beta");
+        assert_eq!(a.selected_text(), Some("beta"));
     }
 
     #[test]

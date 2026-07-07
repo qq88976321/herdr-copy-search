@@ -51,6 +51,7 @@ entrypoint is the same view opened with the search prompt active.
 | `0 ^ $`, `g G` | line start/end, buffer top/bottom |
 | `ctrl+f/b/d/u`, PgUp/PgDn | page and half-page |
 | `/` `?` | incremental regex search down / up (invalid regex falls back to literal) |
+| in prompt: `Left/Right`, `Home/End`, `Delete` | move the cursor and edit the query (`ctrl+a/e` jump, `ctrl+u` clears) |
 | `n` `N` | next / previous match in search direction |
 | `v` `V` | charwise / linewise selection |
 | `y` | copy selection, or the match under the cursor |
@@ -82,6 +83,7 @@ extract_height = 40
 | Keys | Action |
 | --- | --- |
 | type / Backspace | edit the fuzzy query |
+| `Left/Right`, `Home/End`, `Delete` | move the cursor within the query (`ctrl+a/e` jump) |
 | `Up`/`Down`, `ctrl+p/n` | move the selection |
 | `Enter` | insert the pick into the source pane (`herdr pane send-text`) |
 | `Tab` | copy the pick via OSC 52 |
