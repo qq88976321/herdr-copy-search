@@ -410,7 +410,15 @@ impl App {
                 };
             }
             Char('y') if !ctrl => return self.yank(false),
-            Enter => return self.yank(true),
+            Enter => {
+                // Copy the selection or the match under the cursor and
+                // exit; with nothing to copy, Enter still exits copy mode.
+                let eff = self.yank(true);
+                if eff.is_none() {
+                    self.quit = true;
+                }
+                return eff;
+            }
             Char('/') => self.open_prompt(Direction::Forward),
             Char('?') => self.open_prompt(Direction::Backward),
             Char('n') => self.jump_match(true),
@@ -703,6 +711,29 @@ mod tests {
         a.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         let eff = a.handle_key(key('y'));
         assert_eq!(eff, Some(Effect::Copy("bar".into())));
+    }
+
+    #[test]
+    fn enter_without_selection_or_match_quits() {
+        let mut a = app("text");
+        let eff = a.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert!(eff.is_none());
+        assert!(a.quit);
+    }
+
+    #[test]
+    fn enter_on_match_without_selection_copies_and_quits() {
+        let mut a = app("foo bar");
+        a.handle_key(key('/'));
+        a.handle_key(key('b'));
+        a.handle_key(key('a'));
+        a.handle_key(key('r'));
+        // Commit the search; the cursor lands on the match.
+        a.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        // Enter in Normal with no selection copies the match and exits.
+        let eff = a.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(eff, Some(Effect::Copy("bar".into())));
+        assert!(a.quit);
     }
 
     #[test]

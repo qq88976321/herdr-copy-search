@@ -87,7 +87,7 @@ entrypoint is the same view opened with the search prompt active.
 | `v` `V` | charwise / linewise selection |
 | `iw aw iW aW` | select the word / WORD text object under the cursor (works after `v` or on its own) |
 | `y` | copy selection, or the match under the cursor |
-| `Enter` | copy and exit |
+| `Enter` | copy the selection or the match under the cursor and exit; with nothing to copy, just exit |
 | `p` | pattern menu: `[u]rl [f]ile [g]it-sha [i]p [d]igits [q]uoted` |
 | `alt+u/f/g/i/d/q` | activate a pattern directly |
 | mouse | wheel scrolls, click moves, drag selects |
