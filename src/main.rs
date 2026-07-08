@@ -189,8 +189,14 @@ fn run_extract(app: &mut ExtractApp, backdrop: &Buffer) -> io::Result<Option<Ext
     Ok(None)
 }
 
-fn extract_mode(buf: &Buffer, height: u8, source_pane: Option<&str>) -> io::Result<()> {
+fn extract_mode(
+    buf: &Buffer,
+    height: u8,
+    source_pane: Option<&str>,
+    theme: Theme,
+) -> io::Result<()> {
     let mut app = ExtractApp::new(&buf.text(), height, buf.lines.len());
+    app.set_theme(theme);
     match run_extract(&mut app, buf)? {
         Some(ExtractEffect::Copy(text)) => {
             if osc52::emit(&text)? {
@@ -248,7 +254,7 @@ fn main() -> ExitCode {
         .unwrap_or_else(|| herdr_copy_search::config::Config::from_toml(&cfg_text).extract_height);
     let theme = Theme::from_toml(&cfg_text);
     let result = match cli.mode {
-        RunMode::Extract => extract_mode(&buf, height, source_pane.as_deref()),
+        RunMode::Extract => extract_mode(&buf, height, source_pane.as_deref(), theme),
         RunMode::Copy => copy_mode(
             buf,
             false,

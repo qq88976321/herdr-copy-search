@@ -1,3 +1,4 @@
+use crate::config::Theme;
 use crate::lineedit::LineEdit;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 
@@ -143,6 +144,7 @@ pub struct ExtractApp {
     /// Rows the backdrop view is shifted up from the tail (0 = tail).
     pub backdrop_off: usize,
     height_pct: u8,
+    pub theme: Theme,
     pub quit: bool,
 }
 
@@ -161,10 +163,16 @@ impl ExtractApp {
             backdrop_len,
             backdrop_off: 0,
             height_pct: height_pct.clamp(1, 100),
+            theme: Theme::default(),
             quit: false,
         };
         app.refilter();
         app
+    }
+
+    /// Replace the active color theme (ui.rs defaults + user config).
+    pub fn set_theme(&mut self, theme: Theme) {
+        self.theme = theme;
     }
 
     pub fn set_size(&mut self, cols: usize, rows: usize) {

@@ -169,6 +169,22 @@ pub fn mode_hint(app: &App) -> Option<String> {
     })
 }
 
+/// Keybind hint for the extract popup, shown dim on the separator row.
+pub fn extract_hint() -> &'static str {
+    "Tab copy  Enter insert  ^t word/line  Esc cancel"
+}
+
+/// The extract separator row: a box-drawing rule carrying the keybind
+/// hint, filled to `cols` so it still reads as a divider.
+fn extract_header(cols: usize) -> String {
+    let hint = extract_hint();
+    let lead = "\u{2500} ";
+    let used = lead.chars().count() + hint.chars().count() + 1;
+    let mut s = format!("{lead}{hint} ");
+    s.push_str(&"\u{2500}".repeat(cols.saturating_sub(used)));
+    truncate_to_width(s, cols)
+}
+
 /// Always-on top-right indicator, tmux mode-style: selection state,
 /// the active search summary, and the cursor position.
 pub fn indicator(app: &App) -> String {
@@ -446,7 +462,7 @@ pub fn draw_extract(out: &mut impl Write, app: &ExtractApp, backdrop: &Buffer) -
             MoveTo(0, (app.backdrop_rows - 1) as u16),
             Clear(ClearType::CurrentLine),
             SetAttribute(Attribute::Dim),
-            crossterm::style::Print("\u{2500}".repeat(app.view_cols)),
+            crossterm::style::Print(extract_header(app.view_cols)),
             SetAttribute(Attribute::Reset)
         )?;
     }
@@ -461,12 +477,17 @@ pub fn draw_extract(out: &mut impl Write, app: &ExtractApp, backdrop: &Buffer) -
         if let Some(&idx) = window.get(k) {
             let text = truncate_to_width(app.candidates()[idx].clone(), app.view_cols);
             if k == app.window_selected() {
-                queue!(
-                    out,
-                    SetAttribute(Attribute::Reverse),
-                    crossterm::style::Print(text),
-                    SetAttribute(Attribute::Reset)
-                )?;
+                if use_color() {
+                    apply_pair(out, app.theme.extract_selected)?;
+                    queue!(out, crossterm::style::Print(text), ResetColor)?;
+                } else {
+                    queue!(
+                        out,
+                        SetAttribute(Attribute::Reverse),
+                        crossterm::style::Print(text),
+                        SetAttribute(Attribute::Reset)
+                    )?;
+                }
             } else {
                 queue!(out, crossterm::style::Print(text))?;
             }
@@ -477,12 +498,24 @@ pub fn draw_extract(out: &mut impl Write, app: &ExtractApp, backdrop: &Buffer) -
         MoveTo(0, (app.backdrop_rows + app.view_rows) as u16),
         Clear(ClearType::CurrentLine)
     )?;
-    let badge = match app.granularity {
-        Granularity::Word => "word",
-        Granularity::Line => "line",
+    let (badge, badge_pair) = match app.granularity {
+        Granularity::Word => ("[word]", app.theme.badge_word),
+        Granularity::Line => ("[line]", app.theme.badge_line),
     };
-    let prefix = format!("[{badge}] {}> ", app.filtered.len());
-    print_line_edit(out, &prefix, &app.query, app.view_cols)?;
+    if use_color() {
+        apply_pair(out, badge_pair)?;
+        queue!(out, crossterm::style::Print(badge), ResetColor)?;
+    } else {
+        queue!(out, crossterm::style::Print(badge))?;
+    }
+    let prefix = format!(" {}> ", app.filtered.len());
+    let badge_w = badge.chars().count();
+    print_line_edit(
+        out,
+        &prefix,
+        &app.query,
+        app.view_cols.saturating_sub(badge_w),
+    )?;
     out.flush()
 }
 
@@ -780,5 +813,13 @@ mod tests {
         assert_eq!(indicator(&a), "[3/3]");
         a.handle_key(key('V'));
         assert_eq!(indicator(&a), "VISUAL LINE [3/3]");
+    }
+
+    #[test]
+    fn extract_hint_names_core_keys() {
+        let h = extract_hint();
+        for k in ["copy", "insert", "word/line", "Esc"] {
+            assert!(h.contains(k), "extract hint mentions {k}: {h}");
+        }
     }
 }
