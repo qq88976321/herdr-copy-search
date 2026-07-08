@@ -80,19 +80,49 @@ impl Search {
             Some(re) => re,
             None => return,
         };
-        for (row, line) in buf.lines.iter().enumerate() {
-            let s = line.text();
+        // Match over logical lines (soft-wrapped rows joined) so a hit
+        // can cross a wrap; each hit maps back to inclusive buffer
+        // positions. Groups are visited in row order and each yields
+        // matches left to right, keeping `matches` sorted for seek.
+        let mut row = 0;
+        while row < buf.lines.len() {
+            let (r0, r1) = buf.logical_span(row);
+            let mut s = String::new();
+            let mut spans: Vec<(usize, usize)> = Vec::new(); // (row, char offset)
+            let mut acc = 0usize;
+            for r in r0..=r1 {
+                spans.push((r, acc));
+                let line = buf.line(r);
+                s.push_str(&line.text());
+                acc += line.len();
+            }
+            // Map a char offset in `s` back to its buffer Pos.
+            let to_pos = |o: usize| {
+                let mut chosen = spans[0];
+                for &pair in &spans {
+                    if pair.1 <= o {
+                        chosen = pair;
+                    } else {
+                        break;
+                    }
+                }
+                Pos {
+                    row: chosen.0,
+                    col: o - chosen.1,
+                }
+            };
             for m in re.find_iter(&s) {
                 if m.start() == m.end() {
                     continue;
                 }
-                let start = s[..m.start()].chars().count();
-                let end = start + s[m.start()..m.end()].chars().count();
+                let cstart = s[..m.start()].chars().count();
+                let cend = cstart + s[m.start()..m.end()].chars().count();
                 self.matches.push(Match {
-                    start: Pos { row, col: start },
-                    end: Pos { row, col: end - 1 },
+                    start: to_pos(cstart),
+                    end: to_pos(cend - 1),
                 });
             }
+            row = r1 + 1;
         }
     }
 
@@ -226,6 +256,34 @@ mod tests {
         let mut s = Search::default();
         s.run(&b, "foo", Direction::Forward);
         assert_eq!(s.matches, vec![hit(0, 2, 4)]);
+    }
+
+    #[test]
+    fn matches_across_soft_wrap() {
+        // "foobar" wrapped as "foo"(soft) + "bar"; "oobar" spans the wrap.
+        let b = Buffer::from_reads("foobar\nend", "foo\nbar\nend");
+        let mut s = Search::default();
+        s.run(&b, "oobar", Direction::Forward);
+        assert_eq!(
+            s.matches,
+            vec![Match {
+                start: p(0, 1),
+                end: p(1, 2),
+            }]
+        );
+        assert!(s.match_at(p(0, 1)).is_some());
+        assert!(s.match_at(p(1, 0)).is_some());
+        assert!(s.match_at(p(1, 2)).is_some());
+        assert!(s.match_at(p(0, 0)).is_none());
+    }
+
+    #[test]
+    fn hard_newline_is_not_crossed() {
+        // A real newline breaks the logical line, so no cross-row match.
+        let b = Buffer::from_text("foo\nbar");
+        let mut s = Search::default();
+        s.run(&b, "oobar", Direction::Forward);
+        assert!(s.matches.is_empty());
     }
 
     #[test]

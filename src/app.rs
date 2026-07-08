@@ -693,6 +693,25 @@ mod tests {
     }
 
     #[test]
+    fn yank_match_across_soft_wrap_joins_rows() {
+        // "foobar" wrapped as "foo"(soft) + "bar"; "oobar" crosses the wrap.
+        let mut a = App::new(
+            Buffer::from_reads("foobar\nend", "foo\nbar\nend"),
+            false,
+            None,
+        );
+        a.set_size(80, 11);
+        a.handle_key(key('/'));
+        for c in "oobar".chars() {
+            a.handle_key(key(c));
+        }
+        a.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        // The cursor sits on the match start; yank rejoins the wrapped rows.
+        let eff = a.handle_key(key('y'));
+        assert_eq!(eff, Some(Effect::Copy("oobar".into())));
+    }
+
+    #[test]
     fn enter_without_selection_or_match_quits() {
         let mut a = app("text");
         let eff = a.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
