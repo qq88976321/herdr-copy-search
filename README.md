@@ -112,6 +112,26 @@ Values are taken verbatim between the quotes (no TOML escape
 processing). An invalid regex falls back to a literal search, matching
 the incremental-search behavior.
 
+### Colors
+
+The mode badge and highlight colors can be themed in the same config
+file. Each element takes an optional `_fg` and `_bg`; omit one to keep
+its default. A value is a color name (`cyan`, `dark_yellow`, ...), a
+0-255 palette index, or `#rrggbb` hex:
+
+```toml
+# $HERDR_PLUGIN_CONFIG_DIR/config.toml
+badge_copy_bg    = "cyan"        # [copy] badge accent
+badge_search_bg  = "magenta"     # [search] badge accent
+match_bg         = "dark_yellow"
+match_current_bg = "yellow"
+cursor_bg        = "cyan"
+indicator_bg     = "yellow"      # top-right position indicator
+```
+
+Colors honor `NO_COLOR`: the badge and indicator fall back to reverse
+video.
+
 ## Extract mode
 
 extrakto-style picker over the same scrollback: tokens (or whole lines)
@@ -139,6 +159,17 @@ extract_height = 40
 | `ctrl+t` | toggle word / line granularity |
 | `ctrl+u` | clear the query |
 | `Esc` | clear the query, then exit |
+
+The separator line above the picker shows a dim keybind hint. The
+`[word]`/`[line]` badge and the selected row are themable in the same
+config file (`_fg`/`_bg`, same value syntax as the copy-mode colors):
+
+```toml
+# $HERDR_PLUGIN_CONFIG_DIR/config.toml
+badge_word_bg       = "blue"
+badge_line_bg       = "green"
+extract_selected_bg = "white"
+```
 
 ## Development
 
@@ -172,6 +203,12 @@ vhs tapes so they can be regenerated after any UI change.
   `HERDR_ACTIVE_PANE_ID`, then the `focused_pane_id` field of
   `HERDR_PLUGIN_CONTEXT_JSON`. `HERDR_PANE_ID` is the overlay pane
   itself and is deliberately ignored.
+- Nested launches are blocked: each live overlay writes a PID marker
+  (named after its `HERDR_PANE_ID`) under
+  `${XDG_RUNTIME_DIR:-<tmp>}/herdr-copy-search/panes`. If a new
+  instance's source pane is a live overlay, the launch is nested and
+  exits silently before drawing. The marker is removed on exit; one
+  left by a dead process is reaped on the next check.
 - Colors: buffer rows come from `pane read --source recent --format
   ansi` (styled, wrapped at the pane width) so the overlay looks like
   the frozen pane; a second `recent-unwrapped --format text` read
@@ -185,7 +222,7 @@ vhs tapes so they can be regenerated after any UI change.
   holding the prompt, pattern menu, and messages, like herdr's native
   copy mode; match counts and the cursor position stay in the
   tmux-style top-right indicator. The badge is accent-colored (copy vs
-  search) and, when the row is otherwise idle, it shows a dim,
+  search; themable, see Colors) and, when the row is otherwise idle, it shows a dim,
   context-aware keybinding hint. Colors honor `NO_COLOR`, falling back
   to reverse/dim attributes that follow the terminal's own theme.
 - Opening the overlay keeps the source pane's screen in place: a third
