@@ -143,6 +143,38 @@ pub fn mode_badge(app: &App) -> &'static str {
     }
 }
 
+/// Render a mode badge with styling shared across every mode: the themed
+/// fg/bg pair plus bold in color mode, a reverse-video bold bar under
+/// NO_COLOR. The label is truncated to `cols`; returns its display width.
+fn print_badge(
+    out: &mut impl Write,
+    label: &str,
+    pair: ColorPair,
+    cols: usize,
+) -> io::Result<usize> {
+    let badge = truncate_to_width(label.to_string(), cols);
+    let width: usize = badge.chars().map(|c| c.width().unwrap_or(0).max(1)).sum();
+    if use_color() {
+        apply_pair(out, pair)?;
+        queue!(
+            out,
+            SetAttribute(Attribute::Bold),
+            crossterm::style::Print(&badge),
+            ResetColor,
+            SetAttribute(Attribute::Reset)
+        )?;
+    } else {
+        queue!(
+            out,
+            SetAttribute(Attribute::Reverse),
+            SetAttribute(Attribute::Bold),
+            crossterm::style::Print(&badge),
+            SetAttribute(Attribute::Reset)
+        )?;
+    }
+    Ok(width)
+}
+
 /// Extra text for the mode row after the badge: the pattern menu while
 /// it is open, or a transient message. The prompt renders separately
 /// via line_edit_spans; committed searches live in the top-right
@@ -382,34 +414,16 @@ pub fn draw(out: &mut impl Write, app: &App) -> io::Result<()> {
         MoveTo(0, (app.view_rows - 1) as u16),
         Clear(ClearType::CurrentLine)
     )?;
-    let badge = truncate_to_width(mode_badge(app).to_string(), app.view_cols);
     // Search vs copy get distinct accent colors (terminal-themed); with
     // NO_COLOR the badge falls back to a reverse-video bar.
-    if use_color() {
-        let pair = if matches!(app.mode, Mode::Prompt { .. }) {
-            app.theme.badge_search
-        } else {
-            app.theme.badge_copy
-        };
-        apply_pair(out, pair)?;
-        queue!(
-            out,
-            SetAttribute(Attribute::Bold),
-            crossterm::style::Print(&badge),
-            ResetColor,
-            SetAttribute(Attribute::Reset)
-        )?;
+    let pair = if matches!(app.mode, Mode::Prompt { .. }) {
+        app.theme.badge_search
     } else {
-        queue!(
-            out,
-            SetAttribute(Attribute::Reverse),
-            SetAttribute(Attribute::Bold),
-            crossterm::style::Print(&badge),
-            SetAttribute(Attribute::Reset)
-        )?;
-    }
+        app.theme.badge_copy
+    };
+    let badge_w = print_badge(out, mode_badge(app), pair, app.view_cols)?;
     queue!(out, crossterm::style::Print(" "))?;
-    let rest = app.view_cols.saturating_sub(badge.chars().count() + 1);
+    let rest = app.view_cols.saturating_sub(badge_w + 1);
     if let Mode::Prompt {
         direction, input, ..
     } = &app.mode
@@ -502,14 +516,8 @@ pub fn draw_extract(out: &mut impl Write, app: &ExtractApp, backdrop: &Buffer) -
         Granularity::Word => ("[word]", app.theme.badge_word),
         Granularity::Line => ("[line]", app.theme.badge_line),
     };
-    if use_color() {
-        apply_pair(out, badge_pair)?;
-        queue!(out, crossterm::style::Print(badge), ResetColor)?;
-    } else {
-        queue!(out, crossterm::style::Print(badge))?;
-    }
+    let badge_w = print_badge(out, badge, badge_pair, app.view_cols)?;
     let prefix = format!(" {}> ", app.filtered.len());
-    let badge_w = badge.chars().count();
     print_line_edit(
         out,
         &prefix,
