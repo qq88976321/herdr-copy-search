@@ -1,3 +1,5 @@
+use crate::ansi;
+
 /// Plugin configuration from $HERDR_PLUGIN_CONFIG_DIR/config.toml.
 /// Parsed with a minimal flat-TOML extractor in the spirit of
 /// herdr::json_str_field: one `key = value` per line, `#` comments,
@@ -27,6 +29,125 @@ impl Config {
             extract_height: height,
         }
     }
+}
+
+/// Foreground/background color override for one themed UI element.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ColorPair {
+    pub fg: ansi::Color,
+    pub bg: ansi::Color,
+}
+
+/// Colors for the themed UI chrome. Defaults reproduce the values that
+/// were hardcoded in ui.rs; matching config.toml keys override them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Theme {
+    // copy / search
+    pub badge_copy: ColorPair,
+    pub badge_search: ColorPair,
+    pub match_: ColorPair,
+    pub match_current: ColorPair,
+    pub cursor: ColorPair,
+    pub indicator: ColorPair,
+    // extract
+    pub badge_word: ColorPair,
+    pub badge_line: ColorPair,
+    pub extract_selected: ColorPair,
+}
+
+impl Default for Theme {
+    fn default() -> Self {
+        // ANSI palette indices matching the crossterm colors ui.rs used:
+        // dark_yellow=3, green=10, yellow=11, blue=12, magenta=13,
+        // cyan=14, white=15, on a black (0) foreground.
+        let on = |bg| ColorPair {
+            fg: ansi::Color::Indexed(0),
+            bg: ansi::Color::Indexed(bg),
+        };
+        Theme {
+            badge_copy: on(14),
+            badge_search: on(13),
+            match_: on(3),
+            match_current: on(11),
+            cursor: on(14),
+            indicator: on(11),
+            badge_word: on(12),
+            badge_line: on(10),
+            extract_selected: on(15),
+        }
+    }
+}
+
+impl Theme {
+    /// Start from the defaults, then apply any `<item>_fg`/`<item>_bg`
+    /// overrides present in the flat config. Missing or unrecognized
+    /// values keep the default (see parse_color).
+    pub fn from_toml(toml: &str) -> Self {
+        let mut t = Theme::default();
+        override_pair(toml, &mut t.badge_copy, "badge_copy");
+        override_pair(toml, &mut t.badge_search, "badge_search");
+        override_pair(toml, &mut t.match_, "match");
+        override_pair(toml, &mut t.match_current, "match_current");
+        override_pair(toml, &mut t.cursor, "cursor");
+        override_pair(toml, &mut t.indicator, "indicator");
+        override_pair(toml, &mut t.badge_word, "badge_word");
+        override_pair(toml, &mut t.badge_line, "badge_line");
+        override_pair(toml, &mut t.extract_selected, "extract_selected");
+        t
+    }
+}
+
+/// Apply `<prefix>_fg` / `<prefix>_bg` color overrides onto `pair`.
+fn override_pair(toml: &str, pair: &mut ColorPair, prefix: &str) {
+    if let Some(c) = toml_str_field(toml, &format!("{prefix}_fg")).and_then(|v| parse_color(&v)) {
+        pair.fg = c;
+    }
+    if let Some(c) = toml_str_field(toml, &format!("{prefix}_bg")).and_then(|v| parse_color(&v)) {
+        pair.bg = c;
+    }
+}
+
+/// Parse a config color value: `#rrggbb`, a 0-255 palette index, or a
+/// crossterm-style color name. None on anything unrecognized so the
+/// caller keeps its default.
+pub fn parse_color(s: &str) -> Option<ansi::Color> {
+    let s = s.trim();
+    if let Some(hex) = s.strip_prefix('#') {
+        if hex.len() != 6 {
+            return None;
+        }
+        let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+        let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+        let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+        return Some(ansi::Color::Rgb(r, g, b));
+    }
+    if !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()) {
+        return s.parse::<u8>().ok().map(ansi::Color::Indexed);
+    }
+    named_color(s).map(ansi::Color::Indexed)
+}
+
+/// Map a crossterm-style color name to its ANSI palette index.
+fn named_color(name: &str) -> Option<u8> {
+    Some(match name {
+        "black" => 0,
+        "dark_red" => 1,
+        "dark_green" => 2,
+        "dark_yellow" => 3,
+        "dark_blue" => 4,
+        "dark_magenta" => 5,
+        "dark_cyan" => 6,
+        "grey" | "gray" => 7,
+        "dark_grey" | "dark_gray" => 8,
+        "red" => 9,
+        "green" => 10,
+        "yellow" => 11,
+        "blue" => 12,
+        "magenta" => 13,
+        "cyan" => 14,
+        "white" => 15,
+        _ => return None,
+    })
 }
 
 /// Raw text of $HERDR_PLUGIN_CONFIG_DIR/config.toml, or "" when the dir
@@ -173,5 +294,46 @@ mod tests {
     #[test]
     fn load_without_config_dir_defaults() {
         assert_eq!(load(|_| None), Config::default());
+    }
+
+    #[test]
+    fn parse_color_handles_hex_index_and_names() {
+        assert_eq!(
+            parse_color("#5fafff"),
+            Some(ansi::Color::Rgb(0x5f, 0xaf, 0xff))
+        );
+        assert_eq!(parse_color("14"), Some(ansi::Color::Indexed(14)));
+        assert_eq!(parse_color(" cyan "), Some(ansi::Color::Indexed(14)));
+        assert_eq!(parse_color("dark_yellow"), Some(ansi::Color::Indexed(3)));
+        assert_eq!(parse_color("gray"), Some(ansi::Color::Indexed(7)));
+        assert_eq!(parse_color("300"), None, "index out of u8 range");
+        assert_eq!(parse_color("#fff"), None, "hex must be 6 digits");
+        assert_eq!(parse_color("bogus"), None);
+    }
+
+    #[test]
+    fn theme_from_toml_defaults_then_overrides() {
+        assert_eq!(Theme::from_toml(""), Theme::default());
+        let toml = "badge_copy_bg = \"red\"\n\
+                    match_current_fg = \"#000000\"\n\
+                    extract_selected_bg = \"12\"\n";
+        let t = Theme::from_toml(toml);
+        let d = Theme::default();
+        assert_eq!(t.badge_copy.bg, ansi::Color::Indexed(9));
+        assert_eq!(t.badge_copy.fg, d.badge_copy.fg, "fg untouched");
+        assert_eq!(t.match_current.fg, ansi::Color::Rgb(0, 0, 0));
+        assert_eq!(t.extract_selected.bg, ansi::Color::Indexed(12));
+    }
+
+    #[test]
+    fn theme_from_toml_keeps_default_on_invalid_and_stops_at_table() {
+        let toml = "badge_copy_bg = \"bogus\"\n[colors]\nmatch_bg = \"red\"\n";
+        let t = Theme::from_toml(toml);
+        let d = Theme::default();
+        assert_eq!(
+            t.badge_copy.bg, d.badge_copy.bg,
+            "invalid value kept default"
+        );
+        assert_eq!(t.match_.bg, d.match_.bg, "keys after [table] are ignored");
     }
 }
