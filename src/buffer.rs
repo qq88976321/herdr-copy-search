@@ -257,8 +257,17 @@ impl Buffer {
 /// wrapped rows may form only a suffix of their logical line. Returns
 /// false when the texts do not line up (e.g. the pane changed between
 /// the two reads).
+///
+/// Comparison ignores trailing whitespace: the recent-unwrapped read
+/// trims it while the wrapped ansi read keeps it (e.g. a shell prompt's
+/// trailing space), so strict equality would spuriously fail on one row
+/// and drop every soft-wrap flag. Only a group's bottom row can carry
+/// trailing whitespace; interior soft-wrapped rows are full width.
 fn mark_soft_wraps(lines: &mut [Line], unwrapped: &str) -> bool {
-    let logical: Vec<Vec<char>> = unwrapped.lines().map(|l| l.chars().collect()).collect();
+    let logical: Vec<Vec<char>> = unwrapped
+        .lines()
+        .map(|l| l.trim_end().chars().collect())
+        .collect();
     let mut end = lines.len();
     for want in logical.iter().rev() {
         if end == 0 {
@@ -268,17 +277,18 @@ fn mark_soft_wraps(lines: &mut [Line], unwrapped: &str) -> bool {
         loop {
             if start == 0 {
                 // Oldest rows may be a mid-line tail of the logical line.
-                if !rows_match(&lines[start..end], want, true) {
+                let joined = joined_trimmed(&lines[start..end]);
+                if joined.len() > want.len() || want[want.len() - joined.len()..] != joined[..] {
                     return false;
                 }
                 break;
             }
             start -= 1;
-            let total: usize = lines[start..end].iter().map(|l| l.len()).sum();
-            if total < want.len() {
+            let joined = joined_trimmed(&lines[start..end]);
+            if joined.len() < want.len() {
                 continue;
             }
-            if !rows_match(&lines[start..end], want, false) {
+            if joined[..] != want[..] {
                 return false;
             }
             break;
@@ -291,24 +301,13 @@ fn mark_soft_wraps(lines: &mut [Line], unwrapped: &str) -> bool {
     true
 }
 
-/// Do `rows` concatenate to `want` (or, with `suffix`, to a tail of it)?
-fn rows_match(rows: &[Line], want: &[char], suffix: bool) -> bool {
-    let total: usize = rows.iter().map(|l| l.len()).sum();
-    if suffix {
-        if total > want.len() {
-            return false;
-        }
-    } else if total != want.len() {
-        return false;
+/// Concatenated chars of `rows` with trailing whitespace removed.
+fn joined_trimmed(rows: &[Line]) -> Vec<char> {
+    let mut out: Vec<char> = rows.iter().flat_map(|l| l.chars.iter().copied()).collect();
+    while out.last().is_some_and(|c| c.is_whitespace()) {
+        out.pop();
     }
-    let mut pos = want.len() - total;
-    for row in rows {
-        if want[pos..pos + row.len()] != row.chars[..] {
-            return false;
-        }
-        pos += row.len();
-    }
-    true
+    out
 }
 
 #[cfg(test)]
@@ -353,6 +352,21 @@ mod tests {
             "cdef"
         );
         assert_eq!(b.text(), "abcdefgh\nok\n");
+    }
+
+    #[test]
+    fn from_reads_tolerates_trailing_space_mismatch() {
+        // recent-unwrapped trims trailing spaces but the wrapped ansi read
+        // keeps them (here on the tail row). Alignment must still succeed
+        // so the wrapped word joins instead of dropping all soft-wrap flags.
+        let unwrapped = "abcdefgh\nok";
+        let wrapped = "abcd\nefgh\nok ";
+        let b = Buffer::from_reads(unwrapped, wrapped);
+        assert!(b.lines[0].soft_wrap);
+        assert!(!b.lines[1].soft_wrap);
+        assert!(!b.lines[2].soft_wrap);
+        assert_eq!(b.slice_lines(0, 1), "abcdefgh\n");
+        assert_eq!(b.text(), "abcdefgh\nok \n");
     }
 
     #[test]
