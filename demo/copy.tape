@@ -1,19 +1,22 @@
 # vhs tape: copy/search mode demo for the README.
-# Regenerate with: vhs demo/copy.tape  (needs vhs + ttyd + ffmpeg, or
-# docker run --rm -v "$PWD":/vhs ghcr.io/charmbracelet/vhs demo/copy.tape)
-# Procedure and acceptance criteria: docs/checklists/CL-04-demo-recording.md
+# Regenerate: see docs/checklists/CL-04-demo-recording.md (docker vhs
+# with a CJK font mount so the fixture's wide chars render). Produces
+# demo/copy.mp4 at 2x (2400x1400) for crisp text.
 #
 # Flow: open copy mode on the fixture, search up for "error"
 # incrementally, walk matches with n, then pattern-select a URL from
 # the p menu and yank it.
 
-Output demo/copy.gif
+Output demo/copy.mp4
 
-Set FontSize 16
-Set Width 1200
-Set Height 700
-Set Padding 16
+Set FontSize 32
+Set Width 2400
+Set Height 1400
+Set Padding 32
 Set TypingSpeed 100ms
+# 12fps capture: at 2x the headless screenshots are slow, so higher
+# rates drop frames and the clip plays too fast (playback stays 25fps).
+Set Framerate 12
 
 Hide
 Type "cargo build --release --quiet 2>/dev/null; clear; ./target/release/herdr-copy-search --input fixtures/sample.txt --mode copy"

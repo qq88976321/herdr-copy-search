@@ -5,7 +5,11 @@ pane scrollback, plus tmux-copycat-style predefined pattern search and
 extrakto-style token extraction. All copying goes through OSC 52, so it
 works over SSH without any clipboard helper on the remote host.
 
-![copy mode demo](demo/copy.gif)
+<!-- github.com does not play a repo-relative <video> src inline. For an
+inline player, upload demo/copy.mp4 through the web UI (drag it into the
+README/issue editor) and swap src for the returned user-attachments URL.
+See https://github.blog/news-insights/product-news/video-uploads-available-github/ -->
+<video src="demo/copy.mp4" controls width="100%"></video>
 
 herdr has a native copy mode but no scrollback search yet (see
 upstream [discussion #563](https://github.com/ogulcancelik/herdr/discussions/563));
@@ -142,7 +146,7 @@ Like `fzf --height`, the picker occupies only the bottom of the overlay
 (default 40%); the pane content stays visible above it in its original
 colors.
 
-![extract demo](demo/extract.gif)
+<video src="demo/extract.mp4" controls width="100%"></video>
 
 Popup height: pass `--height PCT` in the pane command, or set it in
 the plugin config file (path from `herdr plugin config-dir copy-search`):
