@@ -28,11 +28,21 @@ fn class_at(buf: &Buffer, p: Pos) -> Class {
 
 /// Steps through a virtual position at col == len (the newline), which
 /// reads as whitespace via class_at, so word runs break at line ends.
+/// A soft-wrapped row has no real newline, so that virtual position is
+/// skipped and the wrapped word reads as one continuous run.
 fn advance(buf: &Buffer, p: Pos) -> Option<Pos> {
-    if p.col < buf.line(p.row).len() {
+    let len = buf.line(p.row).len();
+    if p.col < len {
+        let next = p.col + 1;
+        if next == len && p.row < buf.last_row() && buf.line(p.row).soft_wrap {
+            return Some(Pos {
+                row: p.row + 1,
+                col: 0,
+            });
+        }
         return Some(Pos {
             row: p.row,
-            col: p.col + 1,
+            col: next,
         });
     }
     if p.row < buf.last_row() {
@@ -44,6 +54,10 @@ fn advance(buf: &Buffer, p: Pos) -> Option<Pos> {
     None
 }
 
+/// Mirror of `advance`: a hard break exposes the previous row's virtual
+/// newline (reads as whitespace, so words split there); a soft wrap
+/// skips it, landing on the previous row's last char so the wrapped
+/// word stays one run.
 fn retreat(buf: &Buffer, p: Pos) -> Option<Pos> {
     if p.col > 0 {
         return Some(Pos {
@@ -53,10 +67,12 @@ fn retreat(buf: &Buffer, p: Pos) -> Option<Pos> {
     }
     if p.row > 0 {
         let row = p.row - 1;
-        return Some(Pos {
-            row,
-            col: buf.max_col(row),
-        });
+        let col = if buf.line(row).soft_wrap {
+            buf.max_col(row)
+        } else {
+            buf.line(row).len()
+        };
+        return Some(Pos { row, col });
     }
     None
 }
@@ -266,6 +282,29 @@ mod tests {
         assert_eq!(word_end(&b, p(0, 0)), p(0, 2));
         assert_eq!(word_end(&b, p(0, 2)), p(0, 6));
         assert_eq!(word_end(&b, p(0, 6)), p(1, 2));
+    }
+
+    #[test]
+    fn word_motions_span_soft_wrapped_words() {
+        // "foobar" wrapped as "foo"(soft) + "bar", then a real newline.
+        let b = Buffer::from_reads("foobar\nend", "foo\nbar\nend");
+        assert!(b.line(0).soft_wrap);
+        assert!(!b.line(1).soft_wrap);
+        // w from the wrapped word start skips the whole "foobar".
+        assert_eq!(word_forward(&b, p(0, 0)), p(2, 0));
+        // e lands on the last char of the wrapped word (the 'r' of "bar").
+        assert_eq!(word_end(&b, p(0, 0)), p(1, 2));
+        // b from the next word returns to the wrapped word start.
+        assert_eq!(word_backward(&b, p(2, 0)), p(0, 0));
+        // b from inside the continuation row reaches the same start.
+        assert_eq!(word_backward(&b, p(1, 1)), p(0, 0));
+    }
+
+    #[test]
+    fn word_backward_respects_hard_newline() {
+        // A real newline is a word boundary even between two word chars.
+        let b = Buffer::from_text("foo\nbar");
+        assert_eq!(word_backward(&b, p(1, 1)), p(1, 0));
     }
 
     #[test]
