@@ -6,6 +6,7 @@ pub mod extract;
 pub mod herdr;
 pub mod lineedit;
 pub mod motion;
+pub mod nested;
 pub mod osc52;
 pub mod patterns;
 pub mod search;

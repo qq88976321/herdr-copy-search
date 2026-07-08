@@ -4,6 +4,7 @@ use herdr_copy_search::buffer::Buffer;
 use herdr_copy_search::config::Theme;
 use herdr_copy_search::extract::{ExtractApp, ExtractEffect};
 use herdr_copy_search::herdr::{self, Herdr};
+use herdr_copy_search::nested;
 use herdr_copy_search::patterns::Patterns;
 use herdr_copy_search::{osc52, ui};
 use std::io::{self, IsTerminal};
@@ -238,9 +239,20 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let source_pane = herdr::resolve_source_pane(cli.pane.as_deref(), |k| {
-        std::env::var(k).ok().filter(|v| !v.is_empty())
-    });
+    let env = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
+    let source_pane = herdr::resolve_source_pane(cli.pane.as_deref(), env);
+    // Refuse to stack a copy-search overlay on top of itself: when our
+    // source pane is a live overlay, this is a nested launch - exit
+    // before touching the terminal so nothing is drawn. Outside herdr
+    // (no HERDR_PANE_ID) there is nothing to register or guard against.
+    let registry = nested::registry_dir(env);
+    if nested::is_nested(source_pane.as_deref(), |p| {
+        nested::is_active_overlay(&registry, p)
+    }) {
+        return ExitCode::SUCCESS;
+    }
+    let _registry_guard =
+        env("HERDR_PANE_ID").and_then(|id| nested::register(&registry, &id, std::process::id()));
     let (buf, screen_rows) = match acquire_buffer(&cli, source_pane.as_deref()) {
         Ok(acquired) => acquired,
         Err(e) => {
