@@ -174,16 +174,46 @@ fn run_bounds(chars: &[char], col: usize, cls: impl Fn(char) -> u8) -> (usize, u
 }
 
 /// vi word/WORD text object around `p`, returning the inclusive
-/// (start, end) positions on p's row. `around` (aw/aW) extends over
-/// adjacent whitespace (trailing preferred, else leading; on a space
-/// run it takes the following word instead); `big` (iW/aW) treats any
-/// non-whitespace run as one WORD. Operates within the single row.
+/// (start, end) positions. `around` (aw/aW) extends over adjacent
+/// whitespace (trailing preferred, else leading; on a space run it
+/// takes the following word instead); `big` (iW/aW) treats any
+/// non-whitespace run as one WORD. Operates over the whole logical line
+/// (soft-wrapped rows flattened), so a wrapped word is one object and
+/// the returned positions may land on different rows.
 pub fn word_object(buf: &Buffer, p: Pos, around: bool, big: bool) -> (Pos, Pos) {
-    let chars = &buf.line(p.row).chars;
-    if chars.is_empty() {
+    // Flatten the logical line's rows so a soft-wrapped word is one run;
+    // `starts` maps each row to its offset in `flat` for the reverse map.
+    let (r0, r1) = buf.logical_span(p.row);
+    let mut flat: Vec<char> = Vec::new();
+    let mut starts: Vec<(usize, usize)> = Vec::new();
+    for row in r0..=r1 {
+        starts.push((row, flat.len()));
+        flat.extend(buf.line(row).chars.iter().copied());
+    }
+    if flat.is_empty() {
         let z = Pos { row: p.row, col: 0 };
         return (z, z);
     }
+    let base = starts
+        .iter()
+        .find(|(row, _)| *row == p.row)
+        .map_or(0, |(_, off)| *off);
+    let col = base + p.col;
+    // Reverse map: a flat index back to its buffer Pos.
+    let to_pos = |i: usize| {
+        let mut chosen = starts[0];
+        for &pair in &starts {
+            if pair.1 <= i {
+                chosen = pair;
+            } else {
+                break;
+            }
+        }
+        Pos {
+            row: chosen.0,
+            col: i - chosen.1,
+        }
+    };
     // 0 = whitespace; small words split word/punct (1/2), WORDs do not.
     let small = |c: char| match class(c) {
         Class::Space => 0u8,
@@ -192,36 +222,36 @@ pub fn word_object(buf: &Buffer, p: Pos, around: bool, big: bool) -> (Pos, Pos) 
     };
     let big_cls = |c: char| u8::from(class(c) != Class::Space);
     let (mut s, mut e) = if big {
-        run_bounds(chars, p.col, big_cls)
+        run_bounds(&flat, col, big_cls)
     } else {
-        run_bounds(chars, p.col, small)
+        run_bounds(&flat, col, small)
     };
     if around {
-        let last = chars.len() - 1;
-        let on_space = class(chars[p.col.min(last)]) == Class::Space;
+        let last = flat.len() - 1;
+        let on_space = class(flat[col.min(last)]) == Class::Space;
         if on_space {
             // Whitespace object: take the run of the word that follows.
             if e < last {
                 let (_, e2) = if big {
-                    run_bounds(chars, e + 1, big_cls)
+                    run_bounds(&flat, e + 1, big_cls)
                 } else {
-                    run_bounds(chars, e + 1, small)
+                    run_bounds(&flat, e + 1, small)
                 };
                 e = e2;
             }
-        } else if e < last && class(chars[e + 1]) == Class::Space {
+        } else if e < last && class(flat[e + 1]) == Class::Space {
             // Prefer trailing whitespace.
-            while e < last && class(chars[e + 1]) == Class::Space {
+            while e < last && class(flat[e + 1]) == Class::Space {
                 e += 1;
             }
         } else {
             // No trailing whitespace: fall back to leading whitespace.
-            while s > 0 && class(chars[s - 1]) == Class::Space {
+            while s > 0 && class(flat[s - 1]) == Class::Space {
                 s -= 1;
             }
         }
     }
-    (Pos { row: p.row, col: s }, Pos { row: p.row, col: e })
+    (to_pos(s), to_pos(e))
 }
 
 /// }: next blank line (or the last row).
@@ -321,6 +351,16 @@ mod tests {
         assert_eq!(word_object(&b, p(0, 1), false, false), (p(0, 0), p(0, 2)));
         // A lone punctuation run is its own inner word.
         assert_eq!(word_object(&b, p(0, 7), false, false), (p(0, 7), p(0, 7)));
+    }
+
+    #[test]
+    fn word_object_spans_soft_wrapped_word() {
+        // "foobar" wrapped as "foo"(soft) + "bar".
+        let b = Buffer::from_reads("foobar\nend", "foo\nbar\nend");
+        // iw on the continuation row selects the whole wrapped word.
+        assert_eq!(word_object(&b, p(1, 1), false, false), (p(0, 0), p(1, 2)));
+        // iw on the first row spans the whole word too.
+        assert_eq!(word_object(&b, p(0, 1), false, false), (p(0, 0), p(1, 2)));
     }
 
     #[test]
