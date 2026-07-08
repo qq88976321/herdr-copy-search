@@ -1,73 +1,85 @@
-# CL-04: generate README demo videos with vhs
+# CL-04: generate README demo videos with vhs (inside real herdr)
 
-Context: demo/*.tape files script every keystroke of the demos, so
-any agent can regenerate up-to-date videos after a UI change - no human
-recording. The binary runs against fixtures/sample.txt in a plain
-terminal (no herdr needed), which makes the recording deterministic.
-Output is mp4 at 2x (2400x1400) for crisp text; the fixture has a
+Context: demo/*.tape files script every keystroke of the demos, so any
+agent can regenerate up-to-date videos after a UI change - no human
+recording. The demos run the plugin INSIDE a real herdr session (not the
+standalone binary) so the videos show herdr's chrome and the real
+keybinding/pane flow. Output is mp4 at 2x (2400x1400); the fixture has a
 Traditional-Chinese wide-char line, so the render needs a CJK font.
 
-Prerequisites: docker (this host has no native vhs/ttyd/ffmpeg). The
-`ghcr.io/charmbracelet/vhs` image bundles ttyd + ffmpeg but ships only
-Latin fonts, so a CJK font is mounted from the host at render time.
-Verify one exists: `fc-list :lang=zh` (this host has Noto Sans CJK at
-/usr/share/fonts/opentype/noto). The image pull and docker.sock need
-the command sandbox OFF.
+How it works: the vhs docker image bundles ttyd + ffmpeg + chromium but
+not herdr, so the host herdr binary is mounted in (it is statically
+linked, so it runs regardless of the container's glibc). The tape seeds a
+throwaway herdr config (demo/herdr-demo-config.toml), starts a herdr
+server, links this checkout as a plugin, boots the herdr client, fills a
+pane with fixtures/sample.txt as scrollback, then opens the plugin via a
+herdr keybinding and drives it. herdr state lives under HOME=/tmp and dies
+with the --rm container.
+
+Prerequisites:
+- docker (this host has no native vhs/ttyd/ffmpeg). Sandbox OFF: the
+  image pull hits ghcr.io and docker.sock is a unix socket.
+- herdr on PATH (`command -v herdr`). The demo shows whatever version the
+  host has.
+- a CJK font on the host: `fc-list :lang=zh` (this host has Noto Sans CJK
+  at /usr/share/fonts/opentype/noto).
 
 Steps:
-1. [ ] `cargo build --release` on the host (the tape's inner
-       `cargo build` no-ops inside the image - no rust there - and runs
-       the mounted ./target/release binary).
-2. [ ] Render each tape. `--user` keeps the output owned by you (else
-       root); `-e HOME=/tmp` gives fontconfig/chromium a writable home;
-       the noto mount + `fc-cache` let chromium fall back to CJK glyphs:
+1. [ ] `cargo build --release` on the host. The plugin binary is dynamic
+       but runs against the image's newer glibc; herdr reads it through
+       the mounted checkout (HERDR_PLUGIN_ROOT), no cargo in the image.
+2. [ ] Render each tape. `--user` keeps output owned by you; `-e HOME=/tmp`
+       + `XDG_RUNTIME_DIR` give herdr/fontconfig writable homes; the herdr
+       mount supplies the binary; the noto mount + `fc-cache` let chromium
+       fall back to CJK glyphs:
        ```
-       docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+       docker run --rm --user "$(id -u):$(id -g)" \
+         -e HOME=/tmp -e XDG_RUNTIME_DIR=/tmp/run \
          -v "$PWD":/vhs \
+         -v "$(command -v herdr)":/usr/local/bin/herdr:ro \
          -v /usr/share/fonts/opentype/noto:/usr/share/fonts/noto-cjk:ro \
          --entrypoint sh ghcr.io/charmbracelet/vhs \
          -c 'fc-cache -f >/dev/null 2>&1; vhs demo/extract.tape'
        ```
-       Repeat for demo/copy.tape. Expect demo/copy.mp4 and
-       demo/extract.mp4.
-3. [ ] Acceptance criteria - inspect each mp4 (grab frames with the
-       image's ffmpeg: `ffmpeg -ss <t> -i demo/x.mp4 -frames:v 1 f.png`,
-       and check duration with `ffprobe -show_entries format=duration`):
-       - [ ] no shell prompt or build output visible (Hide/Show works)
-       - [ ] duration matches the tape's Sleeps (extract ~8s, copy ~10s).
-             If it is a few seconds long / plays too fast, the 2x capture
-             is dropping frames: LOWER `Set Framerate` (12 works; the
-             default is too high at 2x). Playback stays 25fps regardless.
-       - [ ] CJK line renders as glyphs, not boxes (copy.mp4 opening
-             screen: "wide: <chinese> CJK width test ..."). Boxes mean
-             the noto mount / fc-cache step was skipped.
-       - [ ] copy.mp4: search prompt shows a typed query, matches
-             highlighted, a selection is made, the [copy]/[search] mode
-             row is visible at the bottom
-       - [ ] extract.mp4: candidates -> hint -> separator -> input top to
-             bottom, a divider above the candidates, the [word]/[line]
-             badge colored like [copy]/[search]
-       - [ ] no truncated final frame (the quit keystroke rendered)
-4. [ ] Embed in README: a repo-relative `<video>` src does NOT play
-       inline on github.com. Keep the `<video src="demo/copy.mp4">` tag
-       for local/other renderers; for an inline player on GitHub, after
-       pushing, drag the mp4 into the README/issue editor on the web to
-       get a user-attachments URL and use that as the src (see the
-       HTML comment in README). GitHub video-upload docs:
+       Repeat for demo/copy.tape. Expect demo/copy.mp4 and demo/extract.mp4.
+3. [ ] Acceptance criteria - inspect each mp4 (grab frames with the image's
+       ffmpeg: `ffmpeg -ss <t> -i demo/x.mp4 -frames:v 1 f.png`, and check
+       duration with `ffprobe -show_entries format=duration`):
+       - [ ] herdr chrome is visible (left sidebar: spaces/new/agents; a tab
+             row) so it reads as a herdr plugin
+       - [ ] the pane shell prompt is a clean `$` (not raw escape codes) and
+             no `herdr plugin pane open ...` command is visible - the plugin
+             opens via the prefix keybinding, not a typed command
+       - [ ] duration matches the tape (extract ~11s, copy ~15s). If it plays
+             too fast, the 2x capture is dropping frames: LOWER `Set Framerate`
+             (12 works). Playback stays 25fps regardless.
+       - [ ] CJK line renders as glyphs, not boxes ("wide: <chinese> CJK
+             width test ..."). Boxes mean the noto mount / fc-cache was skipped.
+       - [ ] copy.mp4: `[copy]` mode row, a search or `[copy] url: N matches`
+             pattern-menu state, matches highlighted, the top-right indicator
+       - [ ] extract.mp4: the overlay reads candidates -> hint -> separator ->
+             input, the `[word]`/`[line]` badge colored, ending with herdr's
+             "copied to clipboard" toast
+       - [ ] no overlay border ring (demo config sets pane_borders = false)
+4. [ ] Embed in README: a repo-relative `<video>` src does NOT play inline on
+       github.com. Keep the `<video src="demo/copy.mp4">` tag for local/other
+       renderers; for an inline player on GitHub, after pushing, drag the mp4
+       into the README/issue editor on the web to get a user-attachments URL
+       and use that as the src (see the HTML comment in README). GitHub docs:
        https://github.blog/news-insights/product-news/video-uploads-available-github/
-5. [ ] Commit videos + tape/README edits together:
-       `docs(demo): record copy and extract demos`.
-       mp4s are binary but small (< 1 MB); committing them to the repo
-       is fine. Do not use git-lfs.
+5. [ ] Commit videos + tape/config/README edits together:
+       `docs(demo): record copy and extract demos`. mp4s are binary but small
+       (< 1 MB); commit them to the repo. Do not use git-lfs.
 
-Regeneration rule (add to your dev loop): any commit that changes
-rendering, keybindings, or the fixture MUST regenerate the videos in
-the same branch (rerun steps 1-3, 5). If drift is found later, treat
-it as a bug: regenerate immediately.
+Regeneration rule (add to your dev loop): any commit that changes rendering,
+keybindings, or the fixture MUST regenerate the videos in the same branch
+(rerun steps 1-3, 5). If drift is found later, treat it as a bug: regenerate
+immediately.
 
-Optional CI (ask the user first): charmbracelet/vhs-action@v2 can
-regenerate on demand in GitHub Actions, but it would need the CJK font
-installed in the action and a render-diff in every PR is noise for a
-single-user repo. Prefer keeping it a manual/agent-run step.
+Optional CI (ask the user first): running this in GitHub Actions would need
+herdr, a CJK font, and the plugin build in the action, plus a render-diff in
+every PR - noise for a single-user repo. Prefer keeping it a manual/agent-run
+step.
 
-Done criteria: both mp4s in repo, referenced in README, criteria pass.
+Done criteria: both mp4s in repo (showing real herdr), referenced in README,
+criteria pass.

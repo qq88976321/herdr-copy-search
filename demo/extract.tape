@@ -1,10 +1,11 @@
-# vhs tape: extract mode demo for the README.
+# vhs tape: extract mode demo, recorded inside a real herdr session.
 # Regenerate: see docs/checklists/CL-04-demo-recording.md (docker vhs
-# with a CJK font mount so the fixture's wide chars render). Produces
+# with the host herdr binary + a CJK font mounted). Produces
 # demo/extract.mp4 at 2x (2400x1400) for crisp text.
 #
-# Flow: open the extract picker on the fixture, fuzzy-filter tokens,
-# move the selection, toggle line granularity, copy the pick (Tab).
+# Flow: boot herdr, fill a pane with the fixture as scrollback, open the
+# extract overlay via the plugin keybinding (prefix+tab), fuzzy-filter to
+# URL tokens, move the selection, toggle word/line, copy the pick (Tab).
 
 Output demo/extract.mp4
 
@@ -20,29 +21,38 @@ Set Framerate 12
 Set PlaybackSpeed 0.8
 
 Hide
-Type "cargo build --release --quiet 2>/dev/null; clear; ./target/release/herdr-copy-search --input fixtures/sample.txt --mode extract"
+# Seed a throwaway herdr config, start the server, link this checkout.
+Type "mkdir -p /tmp/run /tmp/.config/herdr; cp /vhs/demo/herdr-demo-config.toml /tmp/.config/herdr/config.toml"
 Enter
-Wait+Screen@60s /\[word\]/
+Type "herdr server >/tmp/srv.log 2>&1 & sleep 3; herdr plugin link /vhs >/tmp/link.log 2>&1"
+Enter
+Sleep 4s
+Type "clear; herdr"
+Enter
+Sleep 4s
+# Clean prompt, then fill the pane with the fixture the plugin will read.
+Type "export PS1='$ '; clear; cat /vhs/fixtures/sample.txt"
+Enter
+Sleep 1500ms
 Show
-
-Sleep 1.5s
-
+Sleep 1500ms
+# Open the extract overlay via the plugin keybinding (no typed command).
+Ctrl+b
+Tab
+Sleep 2s
 # fuzzy-filter down to URL-ish tokens
 Type "http"
-Sleep 1.2s
+Sleep 1200ms
 Down
 Sleep 600ms
 Down
 Sleep 1s
-
 # toggle word -> line granularity and back
 Ctrl+t
-Sleep 1.2s
+Sleep 1200ms
 Ctrl+t
 Sleep 1s
-
-# copy the pick via OSC 52 (exits)
+# copy the pick via OSC 52 (exits the overlay)
 Tab
-Sleep 1.5s
-
+Sleep 1500ms
 Hide
