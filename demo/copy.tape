@@ -3,9 +3,6 @@
 # docker run --rm -v "$PWD":/vhs ghcr.io/charmbracelet/vhs demo/copy.tape)
 # Procedure and acceptance criteria: docs/checklists/CL-04-demo-recording.md
 #
-# STATUS: UNVERIFIED - authored 2026-07-07 on a host without vhs;
-# CL-04 removes this note after the first successful render.
-#
 # Flow: open copy mode on the fixture, search up for "error"
 # incrementally, walk matches with n, then pattern-select a URL from
 # the p menu and yank it.

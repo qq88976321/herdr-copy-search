@@ -3,9 +3,6 @@
 # docker run --rm -v "$PWD":/vhs ghcr.io/charmbracelet/vhs demo/extract.tape)
 # Procedure and acceptance criteria: docs/checklists/CL-04-demo-recording.md
 #
-# STATUS: UNVERIFIED - authored 2026-07-07 on a host without vhs;
-# CL-04 removes this note after the first successful render.
-#
 # Flow: open the extract picker on the fixture, fuzzy-filter tokens,
 # move the selection, toggle line granularity, copy the pick (Tab).
 
@@ -20,7 +17,7 @@ Set TypingSpeed 100ms
 Hide
 Type "cargo build --release --quiet 2>/dev/null; clear; ./target/release/herdr-copy-search --input fixtures/sample.txt --mode extract"
 Enter
-Wait+Screen@60s /omega/
+Wait+Screen@60s /\[word\]/
 Show
 
 Sleep 1.5s

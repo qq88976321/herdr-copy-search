@@ -5,6 +5,8 @@ pane scrollback, plus tmux-copycat-style predefined pattern search and
 extrakto-style token extraction. All copying goes through OSC 52, so it
 works over SSH without any clipboard helper on the remote host.
 
+![copy mode demo](demo/copy.gif)
+
 herdr has a native copy mode but no scrollback search yet (see
 upstream [discussion #563](https://github.com/ogulcancelik/herdr/discussions/563));
 this plugin fills that gap until it lands natively - the planned exit
@@ -139,6 +141,8 @@ are listed newest first and filtered with a built-in fuzzy matcher.
 Like `fzf --height`, the picker occupies only the bottom of the overlay
 (default 40%); the pane content stays visible above it in its original
 colors.
+
+![extract demo](demo/extract.gif)
 
 Popup height: pass `--height PCT` in the pane command, or set it in
 the plugin config file (path from `herdr plugin config-dir copy-search`):
