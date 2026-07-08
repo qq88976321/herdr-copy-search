@@ -161,9 +161,11 @@ extract_height = 40
 | `Esc` | clear the query, then exit |
 | `ctrl+c` | exit |
 
-The separator line above the picker shows a dim keybind hint. The
-`[word]`/`[line]` badge and the selected row are themable in the same
-config file (`_fg`/`_bg`, same value syntax as the copy-mode colors):
+Top to bottom the picker reads: the candidate list, a dim keybind
+hint, a separator rule, then the input row; a divider rule separates
+the pane backdrop above from the candidates. The `[word]`/`[line]`
+badge and the selected row are themable in the same config file
+(`_fg`/`_bg`, same value syntax as the copy-mode colors):
 
 ```toml
 # $HERDR_PLUGIN_CONFIG_DIR/config.toml

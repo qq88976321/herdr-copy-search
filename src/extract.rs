@@ -115,12 +115,13 @@ pub enum ExtractEffect {
 }
 
 /// Screen split for the fzf-style bottom popup: rows above the popup
-/// show the source pane as a backdrop (its last row is the separator),
-/// the popup itself is `clamp(rows * pct / 100, 3, rows)` tall with one
-/// row for the prompt. Returns (backdrop_rows, list_rows).
+/// show the source pane as a backdrop (its last row is the top divider),
+/// the popup itself is `clamp(rows * pct / 100, 4, rows)` tall with three
+/// reserved rows below the list: the keybind hint, a separator rule, and
+/// the prompt. Returns (backdrop_rows, list_rows).
 pub fn popup_layout(rows: usize, pct: u8) -> (usize, usize) {
-    let popup = (rows * pct as usize / 100).max(3).min(rows.max(1));
-    (rows.saturating_sub(popup), popup.saturating_sub(1).max(1))
+    let popup = (rows * pct as usize / 100).max(4).min(rows.max(1));
+    (rows.saturating_sub(popup), popup.saturating_sub(3).max(1))
 }
 
 /// extrakto-style token picker: type to fuzzy-filter, Enter inserts
@@ -134,7 +135,8 @@ pub struct ExtractApp {
     pub filtered: Vec<usize>,
     /// Index into `filtered`; 0 is the best match, drawn next to the prompt.
     pub selected: usize,
-    /// List rows inside the popup (excludes the prompt row).
+    /// List rows inside the popup (excludes the hint, separator, and
+    /// prompt rows).
     pub view_rows: usize,
     pub view_cols: usize,
     /// Rows above the popup showing the pane backdrop.
@@ -374,13 +376,14 @@ mod tests {
 
     #[test]
     fn popup_layout_splits_forty_percent() {
-        assert_eq!(popup_layout(30, 40), (18, 11));
+        // popup = 12 rows: 9 list + hint + separator + prompt.
+        assert_eq!(popup_layout(30, 40), (18, 9));
     }
 
     #[test]
     fn popup_layout_clamps_small_and_full() {
-        assert_eq!(popup_layout(30, 100), (0, 29));
-        assert_eq!(popup_layout(30, 1), (27, 2), "minimum popup of 3 rows");
+        assert_eq!(popup_layout(30, 100), (0, 27));
+        assert_eq!(popup_layout(30, 1), (26, 1), "minimum popup of 4 rows");
         assert_eq!(popup_layout(2, 40), (0, 1), "tiny terminal survives");
     }
 
@@ -505,7 +508,7 @@ mod tests {
     #[test]
     fn selection_moves_within_bounds_and_window_follows() {
         let mut a = ExtractApp::new("one\ntwo\nthree\nfour", 100, 0);
-        a.set_size(80, 3); // 2 content rows
+        a.set_size(80, 5); // 2 list rows (3 reserved: hint, separator, prompt)
         assert_eq!(a.filtered.len(), 4);
         a.handle_key(code(KeyCode::Up));
         a.handle_key(code(KeyCode::Up));

@@ -206,15 +206,10 @@ pub fn extract_hint() -> &'static str {
     "Tab copy  Enter insert  ^t word/line  Esc cancel"
 }
 
-/// The extract separator row: a box-drawing rule carrying the keybind
-/// hint, filled to `cols` so it still reads as a divider.
-fn extract_header(cols: usize) -> String {
-    let hint = extract_hint();
-    let lead = "\u{2500} ";
-    let used = lead.chars().count() + hint.chars().count() + 1;
-    let mut s = format!("{lead}{hint} ");
-    s.push_str(&"\u{2500}".repeat(cols.saturating_sub(used)));
-    truncate_to_width(s, cols)
+/// A full-width box-drawing rule. Used both as the divider between the
+/// backdrop and the candidate list and as the separator above the input.
+fn separator_rule(cols: usize) -> String {
+    truncate_to_width("\u{2500}".repeat(cols), cols)
 }
 
 /// Always-on top-right indicator, tmux mode-style: selection state,
@@ -449,10 +444,11 @@ pub fn draw(out: &mut impl Write, app: &App) -> io::Result<()> {
     out.flush()
 }
 
-/// Extract-mode screen, fzf --height style: the source pane shows
-/// through above (styled backdrop, tail-aligned, ending in a dim
-/// separator rule), the candidate list fills the bottom popup with the
-/// best match next to the prompt line.
+/// Extract-mode screen, fzf --height style. Top to bottom: the source
+/// pane shows through as a styled, tail-aligned backdrop, closed by a
+/// dim divider rule; then the candidate list (best match at the bottom,
+/// next to the hint); then a dim keybind hint; then a dim separator
+/// rule; then the input row with its `[word]`/`[line]` badge.
 pub fn draw_extract(out: &mut impl Write, app: &ExtractApp, backdrop: &Buffer) -> io::Result<()> {
     if app.backdrop_rows > 0 {
         let content_rows = app.backdrop_rows - 1;
@@ -471,12 +467,13 @@ pub fn draw_extract(out: &mut impl Write, app: &ExtractApp, backdrop: &Buffer) -
                 }
             }
         }
+        // Divider between the backdrop and the candidate list.
         queue!(
             out,
             MoveTo(0, (app.backdrop_rows - 1) as u16),
             Clear(ClearType::CurrentLine),
             SetAttribute(Attribute::Dim),
-            crossterm::style::Print(extract_header(app.view_cols)),
+            crossterm::style::Print(separator_rule(app.view_cols)),
             SetAttribute(Attribute::Reset)
         )?;
     }
@@ -507,9 +504,26 @@ pub fn draw_extract(out: &mut impl Write, app: &ExtractApp, backdrop: &Buffer) -
             }
         }
     }
+    // Keybind hint, then a separator rule, sitting below the list and
+    // above the input.
+    let hint_row = app.backdrop_rows + app.view_rows;
     queue!(
         out,
-        MoveTo(0, (app.backdrop_rows + app.view_rows) as u16),
+        MoveTo(0, hint_row as u16),
+        Clear(ClearType::CurrentLine),
+        SetAttribute(Attribute::Dim),
+        crossterm::style::Print(truncate_to_width(extract_hint().to_string(), app.view_cols)),
+        SetAttribute(Attribute::Reset),
+        MoveTo(0, (hint_row + 1) as u16),
+        Clear(ClearType::CurrentLine),
+        SetAttribute(Attribute::Dim),
+        crossterm::style::Print(separator_rule(app.view_cols)),
+        SetAttribute(Attribute::Reset)
+    )?;
+    // Input row.
+    queue!(
+        out,
+        MoveTo(0, (hint_row + 2) as u16),
         Clear(ClearType::CurrentLine)
     )?;
     let (badge, badge_pair) = match app.granularity {
