@@ -336,6 +336,9 @@ impl App {
 
     fn handle_pattern_menu(&mut self, key: KeyEvent) {
         match key.code {
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.quit = true;
+            }
             KeyCode::Esc => self.mode = Mode::Normal,
             KeyCode::Char(c) => {
                 self.mode = Mode::Normal;
@@ -386,6 +389,7 @@ impl App {
             Char('a') if !ctrl => self.pending = Some(Pending::TextObject { around: true }),
             Char('p') if !ctrl => self.mode = Mode::PatternMenu,
             Char('q') if !ctrl => self.quit = true,
+            Char('c') if ctrl => self.quit = true,
             Esc => {
                 if self.sel.is_some() {
                     self.sel = None;
@@ -504,6 +508,10 @@ impl App {
             return;
         };
         match key.code {
+            Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.quit = true;
+                return;
+            }
             Esc => {
                 // Cancel: restore view and the previous search highlights.
                 self.cursor = origin;
@@ -614,6 +622,10 @@ mod tests {
 
     fn key(c: char) -> KeyEvent {
         KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
+    }
+
+    fn ctrl(c: char) -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
     }
 
     fn app(text: &str) -> App {
@@ -765,6 +777,31 @@ mod tests {
         a.handle_key(key('p'));
         a.handle_key(key('z'));
         assert_eq!(a.message.as_deref(), Some("no pattern: z"));
+    }
+
+    #[test]
+    fn ctrl_c_quits_from_normal() {
+        let mut a = app("text");
+        a.handle_key(ctrl('c'));
+        assert!(a.quit);
+    }
+
+    #[test]
+    fn ctrl_c_quits_from_prompt() {
+        let mut a = app("text");
+        a.handle_key(key('/'));
+        assert!(matches!(a.mode, Mode::Prompt { .. }));
+        a.handle_key(ctrl('c'));
+        assert!(a.quit);
+    }
+
+    #[test]
+    fn ctrl_c_quits_from_pattern_menu() {
+        let mut a = app("text");
+        a.handle_key(key('p'));
+        assert!(matches!(a.mode, Mode::PatternMenu));
+        a.handle_key(ctrl('c'));
+        assert!(a.quit);
     }
 
     #[test]

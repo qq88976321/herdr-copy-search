@@ -91,7 +91,7 @@ entrypoint is the same view opened with the search prompt active.
 | `p` | pattern menu: `[u]rl [f]ile [g]it-sha [i]p [d]igits [q]uoted` |
 | `alt+u/f/g/i/d/q` | activate a pattern directly |
 | mouse | wheel scrolls, click moves, drag selects |
-| `q`, `Esc` | exit (Esc clears the selection first) |
+| `q`, `Esc`, `ctrl+c` | exit (Esc clears the selection or cancels the search first; ctrl+c exits from any mode) |
 
 Pattern searches run backward from the cursor like tmux-copycat: the
 nearest match above is selected and `n` walks up through older output.
@@ -159,6 +159,7 @@ extract_height = 40
 | `ctrl+t` | toggle word / line granularity |
 | `ctrl+u` | clear the query |
 | `Esc` | clear the query, then exit |
+| `ctrl+c` | exit |
 
 The separator line above the picker shows a dim keybind hint. The
 `[word]`/`[line]` badge and the selected row are themable in the same
