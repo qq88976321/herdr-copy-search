@@ -112,12 +112,13 @@ user is the author.
 | F1 | [~] User-defined patterns via plugin config, TTY check pending | M | #2 |
 | F2 | [ ] Extract: jump-to-match (land in copy mode at the token) | S/M | #11 |
 | F3 | [ ] Open actions: file:line in $EDITOR, URL in browser | M/L | #4 |
-| F4 | [ ] Search across soft-wrap boundaries | M | #10 |
+| F4 | [x] Search across soft-wrap boundaries | M | #10 |
 | F5 | [~] Word text objects (viw/vaw/viW/vaW), TTY check pending | S | #1 gap |
 | F6 | [ ] Extract: multi-select (Tab-mark several tokens) | S/M | #13 |
 | F7 | [!] Copy last command output / prompt jump (OSC 133) | L | #5 |
 | F8 | [~] Smartcase toggle in search (`S`), TTY check pending | S | weak |
 | F9 | [~] Mode-row polish: accent badge + idle key hint (TTY check + GIF pending) | S/M | author req |
+| F10 | [ ] Overlay reflow: rewrap logical lines to the overlay width | L | future/UX |
 | R1 | [x] Panic audit: none in non-test code; TUI panic-safe | S | robustness |
 
 - F1: every mature tool converged on user regexes in config (extrakto
@@ -145,13 +146,16 @@ user is the author.
   opener command; also check herdr link handlers as the URL path.
   Done when: pattern/extract pick can open in editor/browser with a
   config-defined command, documented caveats.
-- F4: known limit documented in README design notes (searches do not
-  match across a wrap boundary); real demand: tmux #966, copycat
-  #59/#94, zellij #2853. The two-read composition already aligns
-  soft-wrap flags for yanks; extend matching to logical
-  (wrap-joined) lines and map hits back to display rows. Done when:
-  a URL split across two display rows is findable and yankable as
-  one match; unit tests cover the row mapping.
+- F4: [DONE] real demand: tmux #966, copycat #59/#94, zellij #2853.
+  Search now matches over logical (soft-wrap joined) lines and maps
+  hits back to inclusive buffer positions, so a URL split across two
+  display rows is one findable, yankable match (search.rs `run` +
+  `Match { start, end }` span + `Buffer::logical_span`). Done as part
+  of the same soft-wrap-awareness pass that also made copy-mode word
+  motions (w/b/e) and word text objects (iw/aw) treat a wrapped word
+  as one unit (motion.rs `advance`/`retreat`/`word_object`). Unit
+  tests cover the row mapping (search.rs, motion.rs, app.rs yank).
+  Remaining soft-wrap gap tracked as F10 (visual reflow).
 - F5: wezterm #4471 (21 reactions) asks for exactly this in a copy
   mode. We have w/b/e motions already; add viw/vaw/viW/vaW. Done
   when: text objects work in charwise selection + tests.
@@ -195,6 +199,20 @@ user is the author.
     width limits (and/or `?` toggles it); README notes it; unit tests
     cover the hint-string selection + truncation (rendering itself is
     TTY-verified).
+- F10: future research, raised alongside F4. The overlay renders the
+  frozen source-pane rows, which are wrapped at the SOURCE pane's
+  width; a plugin overlay is full-window, so a word soft-wrapped in a
+  narrow pane still shows a visual break mid-screen even though logic
+  (navigation, selection, copy, search) now treats it as one word
+  (F4). Fully removing the visual break means rewrapping the logical
+  lines to the overlay width. This is a large change: it must remap
+  every position, per-char style, selection, and search highlight to
+  the new layout, and it deliberately breaks the current "the overlay
+  looks like the frozen pane" principle and the visible-read view
+  anchor (see In-place section). Investigate feasibility and whether
+  the payoff beats the layout complexity before committing. Do NOT
+  start without a CL-06 brainstorm; the logic-only fix (F4) already
+  removes the correctness pain, leaving this as pure visual polish.
 - R1: audit unwrap/expect/panic in non-test code paths; each site
   either becomes an error path or gets a comment stating why it
   cannot fail. TUI must never panic mid-alt-screen (leaves the

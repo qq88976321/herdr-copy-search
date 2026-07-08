@@ -225,10 +225,15 @@ vhs tapes so they can be regenerated after any UI change.
   the frozen pane; a second `recent-unwrapped --format text` read
   aligns them into soft-wrap flags so yanks rejoin wrapped long lines.
   (`recent-unwrapped --format ansi` returns empty on herdr 0.7.1 once
-  scrollback grows, hence the two-read composition.) Known limits:
-  searches do not match across a wrap boundary, and if the pane
-  changes between the two reads the wrap joining degrades to hard
-  breaks for that snapshot.
+  scrollback grows, hence the two-read composition.) The soft-wrap
+  flags make navigation, word selection (iw/aw), search, and copy
+  treat a word wrapped across two display rows as one unit; a word or
+  URL split at the wrap is one motion target, one text object, and one
+  search match/yank. Known limits: the wrapped word is still shown
+  broken at the source pane's width (the overlay does not rewrap to its
+  own width; tracked as ROADMAP F10), and if the pane changes between
+  the two reads the wrap joining degrades to hard breaks for that
+  snapshot.
 - The bottom row is a persistent mode row (`[copy]` / `[search]`)
   holding the prompt, pattern menu, and messages, like herdr's native
   copy mode; match counts and the cursor position stay in the
