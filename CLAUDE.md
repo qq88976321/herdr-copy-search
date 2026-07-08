@@ -76,6 +76,14 @@ against herdr 0.7.1 on 2026-07-06/07. Trust them over intuition.
   recent-unwrapped) regardless of --lines; content is the newest tail.
 - `herdr pane read --source visible --format text` returns screen
   rows with trailing blank rows trimmed; interior blanks are kept.
+- The two reads disagree on trailing whitespace: `recent-unwrapped
+  --format text` (logical lines) trims each line's trailing spaces,
+  but `recent --format ansi` (wrapped rows) keeps them (e.g. a shell
+  prompt's `> ` cell). Verified on herdr 0.7.3, 2026-07-08. Soft-wrap
+  alignment (buffer.rs mark_soft_wraps) must compare trailing-trimmed
+  text or a single padded row makes alignment fail and drops every
+  soft_wrap flag - which silently disables wrapped-word joining for
+  motions/selection/search on the live pane path.
 - `[[panes]].command` argv[0] resolves via PATH only; relative paths
   fail even though the process cwd is the plugin root. Wrap with
   `sh -c 'exec "$HERDR_PLUGIN_ROOT/..."'` (see herdr-plugin.toml).
