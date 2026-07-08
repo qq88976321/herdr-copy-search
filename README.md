@@ -81,7 +81,7 @@ entrypoint is the same view opened with the search prompt active.
 | `0 ^ $`, `g G` | line start/end, buffer top/bottom |
 | `ctrl+f/b/d/u`, PgUp/PgDn | page and half-page |
 | `/` `?` | incremental regex search down / up (invalid regex falls back to literal) |
-| in prompt: `Left/Right`, `Home/End`, `Delete` | move the cursor and edit the query (`ctrl+a/e` jump, `ctrl+u` clears) |
+| in prompt: `Left/Right`, `Home/End`, `Delete` | edit the query, readline-style: `ctrl+a/e` line ends, `ctrl+b/f` char, `ctrl+w` delete word, `ctrl+k` kill to end, `ctrl+d` delete, `ctrl+u` clears |
 | `n` `N` | next / previous match in search direction |
 | `S` | toggle smartcase (default on: an all-lowercase query ignores case, any uppercase is case-sensitive; off is always case-sensitive) |
 | `v` `V` | charwise / linewise selection |
@@ -151,7 +151,7 @@ extract_height = 40
 | Keys | Action |
 | --- | --- |
 | type / Backspace | edit the fuzzy query |
-| `Left/Right`, `Home/End`, `Delete` | move the cursor within the query (`ctrl+a/e` jump) |
+| `Left/Right`, `Home/End`, `Delete` | edit the query, readline-style: `ctrl+a/e` line ends, `ctrl+b/f` char, `ctrl+w` delete word, `ctrl+k` kill to end, `ctrl+d` delete |
 | `Up`/`Down`, `ctrl+p/n` | move the selection |
 | `PgUp/PgDn`, wheel over the backdrop | scroll the pane output above the popup (wheel over the list moves the selection) |
 | `Enter` | insert the pick into the source pane (`herdr pane send-text`) |

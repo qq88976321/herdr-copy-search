@@ -81,6 +81,26 @@ impl LineEdit {
         self.cursor = 0;
     }
 
+    /// Kill from the cursor to the end of the line (readline Ctrl-K).
+    fn kill_to_end(&mut self) {
+        self.chars.truncate(self.cursor);
+    }
+
+    /// Delete the word before the cursor, unix-word-rubout style (readline
+    /// Ctrl-W): drop any whitespace right before the cursor, then the run
+    /// of non-whitespace before that.
+    fn delete_word_back(&mut self) {
+        let mut i = self.cursor;
+        while i > 0 && self.chars[i - 1].is_whitespace() {
+            i -= 1;
+        }
+        while i > 0 && !self.chars[i - 1].is_whitespace() {
+            i -= 1;
+        }
+        self.chars.drain(i..self.cursor);
+        self.cursor = i;
+    }
+
     /// Apply an editing or movement key; false when the key is not an
     /// editing key so the caller can run its own bindings.
     pub fn handle_key(&mut self, key: KeyEvent) -> bool {
@@ -89,6 +109,12 @@ impl LineEdit {
             KeyCode::Char('u') if ctrl => self.clear(),
             KeyCode::Char('a') if ctrl => self.home(),
             KeyCode::Char('e') if ctrl => self.end(),
+            KeyCode::Char('b') if ctrl => self.left(),
+            KeyCode::Char('f') if ctrl => self.right(),
+            KeyCode::Char('d') if ctrl => self.delete(),
+            KeyCode::Char('h') if ctrl => self.backspace(),
+            KeyCode::Char('w') if ctrl => self.delete_word_back(),
+            KeyCode::Char('k') if ctrl => self.kill_to_end(),
             KeyCode::Char(c) if !ctrl => self.insert(c),
             KeyCode::Backspace => self.backspace(),
             KeyCode::Delete => self.delete(),
@@ -197,6 +223,55 @@ mod tests {
         assert_eq!(le.cursor(), 0);
         assert!(le.handle_key(ctrl('u')));
         assert!(le.is_empty());
+    }
+
+    #[test]
+    fn ctrl_w_deletes_word_back() {
+        let mut le = edit("foo bar");
+        assert!(le.handle_key(ctrl('w')));
+        assert_eq!(le.text(), "foo ");
+        // Trailing whitespace before the cursor is eaten with the word.
+        assert!(le.handle_key(ctrl('w')));
+        assert_eq!(le.text(), "");
+        // Mid-line: only the word left of the cursor goes.
+        let mut le = edit("alpha beta");
+        le.left(); // cursor before the last char
+        le.left();
+        le.left();
+        le.left(); // cursor right after "alpha "
+        assert!(le.handle_key(ctrl('w')));
+        assert_eq!(le.text(), "beta");
+    }
+
+    #[test]
+    fn ctrl_k_kills_to_end() {
+        let mut le = edit("abcd");
+        le.home();
+        le.right();
+        le.right();
+        assert!(le.handle_key(ctrl('k')));
+        assert_eq!(le.text(), "ab");
+        assert_eq!(le.cursor(), 2);
+    }
+
+    #[test]
+    fn ctrl_b_and_f_move_by_char() {
+        let mut le = edit("ab");
+        assert!(le.handle_key(ctrl('b')));
+        assert_eq!(le.cursor(), 1);
+        assert!(le.handle_key(ctrl('f')));
+        assert_eq!(le.cursor(), 2);
+    }
+
+    #[test]
+    fn ctrl_d_deletes_forward_and_ctrl_h_backspaces() {
+        let mut le = edit("abc");
+        le.home();
+        assert!(le.handle_key(ctrl('d')));
+        assert_eq!(le.text(), "bc");
+        le.end();
+        assert!(le.handle_key(ctrl('h')));
+        assert_eq!(le.text(), "b");
     }
 
     #[test]
