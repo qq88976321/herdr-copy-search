@@ -1,4 +1,5 @@
 use crate::buffer::{Buffer, Pos};
+use crate::config::Theme;
 use crate::lineedit::LineEdit;
 use crate::motion;
 use crate::patterns::{PatternDef, Patterns};
@@ -43,6 +44,7 @@ pub struct App {
     pub view_cols: usize,
     pub search: Search,
     pub patterns: Patterns,
+    pub theme: Theme,
     pub mode: Mode,
     pub sel: Option<(SelKind, Pos)>,
     pub message: Option<String>,
@@ -84,6 +86,7 @@ impl App {
             view_cols: 80,
             search: Search::default(),
             patterns: Patterns::default(),
+            theme: Theme::default(),
             mode,
             sel: None,
             message: None,
@@ -100,6 +103,11 @@ impl App {
     /// Replace the active pattern set (copycat defaults + user config).
     pub fn set_patterns(&mut self, patterns: Patterns) {
         self.patterns = patterns;
+    }
+
+    /// Replace the active color theme (ui.rs defaults + user config).
+    pub fn set_theme(&mut self, theme: Theme) {
+        self.theme = theme;
     }
 
     /// Called by the UI before each draw with the terminal size.

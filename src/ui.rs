@@ -1,6 +1,7 @@
 use crate::ansi;
 use crate::app::{App, Mode, SelKind};
 use crate::buffer::{Buffer, Pos};
+use crate::config::{ColorPair, Theme};
 use crate::extract::{ExtractApp, Granularity};
 use crate::lineedit::LineEdit;
 use crate::search::Direction;
@@ -229,25 +230,25 @@ fn apply_source_style(out: &mut impl Write, s: ansi::Style) -> io::Result<()> {
     Ok(())
 }
 
-fn apply_attrs(out: &mut impl Write, a: SpanAttrs) -> io::Result<()> {
+/// Emit a themed fg/bg color pair, skipping either side that is Default
+/// (leave the terminal's own color in place).
+fn apply_pair(out: &mut impl Write, pair: ColorPair) -> io::Result<()> {
+    if let Some(c) = term_color(pair.fg) {
+        queue!(out, SetForegroundColor(c))?;
+    }
+    if let Some(c) = term_color(pair.bg) {
+        queue!(out, SetBackgroundColor(c))?;
+    }
+    Ok(())
+}
+
+fn apply_attrs(out: &mut impl Write, a: SpanAttrs, theme: &Theme) -> io::Result<()> {
     match a.hl {
         Hl::None => apply_source_style(out, a.style)?,
-        Hl::Match => queue!(
-            out,
-            SetForegroundColor(Color::Black),
-            SetBackgroundColor(Color::DarkYellow)
-        )?,
-        Hl::CurrentMatch => queue!(
-            out,
-            SetForegroundColor(Color::Black),
-            SetBackgroundColor(Color::Yellow)
-        )?,
+        Hl::Match => apply_pair(out, theme.match_)?,
+        Hl::CurrentMatch => apply_pair(out, theme.match_current)?,
         Hl::Sel => queue!(out, SetAttribute(Attribute::Reverse))?,
-        Hl::Cursor => queue!(
-            out,
-            SetForegroundColor(Color::Black),
-            SetBackgroundColor(Color::Cyan)
-        )?,
+        Hl::Cursor => apply_pair(out, theme.cursor)?,
     }
     Ok(())
 }
@@ -335,7 +336,7 @@ pub fn draw(out: &mut impl Write, app: &App) -> io::Result<()> {
         let row = app.top + y;
         if row <= app.buf.last_row() {
             for (attrs, text) in clip_spans(row_spans(app, row), app.hoff, app.view_cols) {
-                apply_attrs(out, attrs)?;
+                apply_attrs(out, attrs, &app.theme)?;
                 queue!(out, crossterm::style::Print(text), ResetColor)?;
                 queue!(out, SetAttribute(Attribute::Reset))?;
             }
@@ -347,13 +348,8 @@ pub fn draw(out: &mut impl Write, app: &App) -> io::Result<()> {
     if w <= app.view_cols {
         queue!(out, MoveTo((app.view_cols - w) as u16, 0))?;
         if use_color() {
-            queue!(
-                out,
-                SetForegroundColor(Color::Black),
-                SetBackgroundColor(Color::Yellow),
-                crossterm::style::Print(format!(" {ind}")),
-                ResetColor
-            )?;
+            apply_pair(out, app.theme.indicator)?;
+            queue!(out, crossterm::style::Print(format!(" {ind}")), ResetColor)?;
         } else {
             queue!(
                 out,
@@ -374,15 +370,14 @@ pub fn draw(out: &mut impl Write, app: &App) -> io::Result<()> {
     // Search vs copy get distinct accent colors (terminal-themed); with
     // NO_COLOR the badge falls back to a reverse-video bar.
     if use_color() {
-        let bg = if matches!(app.mode, Mode::Prompt { .. }) {
-            Color::Magenta
+        let pair = if matches!(app.mode, Mode::Prompt { .. }) {
+            app.theme.badge_search
         } else {
-            Color::Cyan
+            app.theme.badge_copy
         };
+        apply_pair(out, pair)?;
         queue!(
             out,
-            SetForegroundColor(Color::Black),
-            SetBackgroundColor(bg),
             SetAttribute(Attribute::Bold),
             crossterm::style::Print(&badge),
             ResetColor,

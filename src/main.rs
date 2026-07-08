@@ -1,6 +1,7 @@
 use crossterm::event::{self, Event, KeyEventKind};
 use herdr_copy_search::app::{App, Effect};
 use herdr_copy_search::buffer::Buffer;
+use herdr_copy_search::config::Theme;
 use herdr_copy_search::extract::{ExtractApp, ExtractEffect};
 use herdr_copy_search::herdr::{self, Herdr};
 use herdr_copy_search::patterns::Patterns;
@@ -212,9 +213,11 @@ fn copy_mode(
     start_search: bool,
     screen_rows: Option<usize>,
     patterns: Patterns,
+    theme: Theme,
 ) -> io::Result<()> {
     let mut app = App::new(buf, start_search, screen_rows);
     app.set_patterns(patterns);
+    app.set_theme(theme);
     if run(&mut app)? {
         std::thread::sleep(osc52::FORWARD_GRACE);
     }
@@ -243,10 +246,23 @@ fn main() -> ExitCode {
     let height = cli
         .height
         .unwrap_or_else(|| herdr_copy_search::config::Config::from_toml(&cfg_text).extract_height);
+    let theme = Theme::from_toml(&cfg_text);
     let result = match cli.mode {
         RunMode::Extract => extract_mode(&buf, height, source_pane.as_deref()),
-        RunMode::Copy => copy_mode(buf, false, screen_rows, Patterns::from_config(&cfg_text)),
-        RunMode::Search => copy_mode(buf, true, screen_rows, Patterns::from_config(&cfg_text)),
+        RunMode::Copy => copy_mode(
+            buf,
+            false,
+            screen_rows,
+            Patterns::from_config(&cfg_text),
+            theme,
+        ),
+        RunMode::Search => copy_mode(
+            buf,
+            true,
+            screen_rows,
+            Patterns::from_config(&cfg_text),
+            theme,
+        ),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
