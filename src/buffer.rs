@@ -161,6 +161,22 @@ impl Buffer {
         &self.lines[row]
     }
 
+    /// Inclusive physical-row range of the logical line (soft-wrap group)
+    /// containing `row`. Rows join across a boundary whose upper row has
+    /// `soft_wrap` set. Returns `(row, row)` when `row` has no soft-wrap
+    /// neighbours, so callers degrade to single-row behaviour.
+    pub fn logical_span(&self, row: usize) -> (usize, usize) {
+        let mut first = row;
+        while first > 0 && self.lines[first - 1].soft_wrap {
+            first -= 1;
+        }
+        let mut last = row;
+        while last < self.last_row() && self.lines[last].soft_wrap {
+            last += 1;
+        }
+        (first, last)
+    }
+
     /// Max cursor col for a row; the cursor sits on a char (vi style).
     pub fn max_col(&self, row: usize) -> usize {
         self.line(row).len().saturating_sub(1)
@@ -374,6 +390,22 @@ mod tests {
         let b = Buffer::from_reads(unwrapped, wrapped);
         assert_eq!(b.lines.len(), 3);
         assert!(b.lines.iter().all(|l| !l.soft_wrap));
+    }
+
+    #[test]
+    fn logical_span_groups_soft_wrapped_rows() {
+        // rows: 0 "abcd"(soft) -> 1 "efgh" | 2 "ok"
+        let b = Buffer::from_reads("abcdefgh\nok", "abcd\nefgh\nok");
+        assert_eq!(b.logical_span(0), (0, 1));
+        assert_eq!(b.logical_span(1), (0, 1));
+        assert_eq!(b.logical_span(2), (2, 2));
+    }
+
+    #[test]
+    fn logical_span_is_single_row_without_wrap() {
+        let b = Buffer::from_text("one\ntwo");
+        assert_eq!(b.logical_span(0), (0, 0));
+        assert_eq!(b.logical_span(1), (1, 1));
     }
 
     #[test]
