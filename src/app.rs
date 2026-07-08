@@ -231,18 +231,9 @@ impl App {
 
     fn yank(&mut self, exit: bool) -> Option<Effect> {
         let text = self.selection_text().or_else(|| {
-            self.search.match_at(self.cursor).map(|m| {
-                self.buf.slice_inclusive(
-                    Pos {
-                        row: m.row,
-                        col: m.start,
-                    },
-                    Pos {
-                        row: m.row,
-                        col: m.end - 1,
-                    },
-                )
-            })
+            self.search
+                .match_at(self.cursor)
+                .map(|m| self.buf.slice_inclusive(m.start, m.end))
         })?;
         if exit {
             self.quit = true;
@@ -264,10 +255,7 @@ impl App {
             self.search.prev(self.cursor)
         };
         match m {
-            Some(m) => self.goto(Pos {
-                row: m.row,
-                col: m.start,
-            }),
+            Some(m) => self.goto(m.start),
             None => self.message = Some(format!("no match: {}", self.search.pattern)),
         }
     }
@@ -290,10 +278,7 @@ impl App {
             return;
         }
         match self.search.seek(origin, dir, true) {
-            Some(m) => self.goto(Pos {
-                row: m.row,
-                col: m.start,
-            }),
+            Some(m) => self.goto(m.start),
             None => {
                 self.cursor = origin;
                 self.top = origin_top;
@@ -326,10 +311,7 @@ impl App {
             return;
         }
         if let Some(m) = self.search.seek(self.cursor, Direction::Backward, true) {
-            self.goto(Pos {
-                row: m.row,
-                col: m.start,
-            });
+            self.goto(m.start);
         }
         self.message = Some(format!("{}: {} matches", def.name, n));
     }
@@ -538,10 +520,7 @@ impl App {
                     }
                     self.search.run(&self.buf, &saved, direction);
                     match self.search.seek(origin, direction, false) {
-                        Some(m) => self.goto(Pos {
-                            row: m.row,
-                            col: m.start,
-                        }),
+                        Some(m) => self.goto(m.start),
                         None => self.message = Some(format!("no match: {}", saved)),
                     }
                 } else if self.search.matches.is_empty() {

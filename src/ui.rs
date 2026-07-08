@@ -38,7 +38,7 @@ fn hl_at(app: &App, row: usize, col: usize, sel: Option<(usize, usize)>) -> Hl {
     // `.get` not `[i]`: `current` is kept in bounds by Search, but a
     // draw is the worst place to panic, so index defensively.
     if let Some(m) = app.search.current.and_then(|i| app.search.matches.get(i)) {
-        if m.row == row && col >= m.start && col < m.end {
+        if m.covers(Pos { row, col }) {
             return Hl::CurrentMatch;
         }
     }

@@ -1,12 +1,21 @@
 use crate::buffer::{Buffer, Pos};
 
-/// One search hit. `start`/`end` are char indices into the row (end
-/// exclusive), matching the Buffer coordinate system.
+/// One search hit as an inclusive span of buffer positions. A hit may
+/// cross soft-wrapped rows, so `start` and `end` can be on different
+/// rows; `end` is the last matched position (inclusive), which lets a
+/// wrapped match be copied directly via `Buffer::slice_inclusive`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Match {
-    pub row: usize,
-    pub start: usize,
-    pub end: usize,
+    pub start: Pos,
+    pub end: Pos,
+}
+
+impl Match {
+    /// Whether `p` lies within the span. Pos ordering is row-major, so a
+    /// multi-row span covers every position on its interior rows.
+    pub fn covers(&self, p: Pos) -> bool {
+        self.start <= p && p <= self.end
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,7 +88,10 @@ impl Search {
                 }
                 let start = s[..m.start()].chars().count();
                 let end = start + s[m.start()..m.end()].chars().count();
-                self.matches.push(Match { row, start, end });
+                self.matches.push(Match {
+                    start: Pos { row, col: start },
+                    end: Pos { row, col: end - 1 },
+                });
             }
         }
     }
@@ -101,21 +113,24 @@ impl Search {
         let idx = match dir {
             Direction::Forward => {
                 let key = if inclusive {
-                    (pos.row, pos.col)
+                    pos
                 } else {
-                    (pos.row, pos.col + 1)
+                    Pos {
+                        row: pos.row,
+                        col: pos.col + 1,
+                    }
                 };
                 self.matches
                     .iter()
-                    .position(|m| (m.row, m.start) >= key)
+                    .position(|m| m.start >= key)
                     .unwrap_or(0)
             }
             Direction::Backward => {
-                let key = (pos.row, pos.col);
+                let key = pos;
                 let hit = if inclusive {
-                    self.matches.iter().rposition(|m| (m.row, m.start) <= key)
+                    self.matches.iter().rposition(|m| m.start <= key)
                 } else {
-                    self.matches.iter().rposition(|m| (m.row, m.start) < key)
+                    self.matches.iter().rposition(|m| m.start < key)
                 };
                 hit.unwrap_or(self.matches.len() - 1)
             }
@@ -138,10 +153,7 @@ impl Search {
 
     /// The match covering `pos`, if any.
     pub fn match_at(&self, pos: Pos) -> Option<Match> {
-        self.matches
-            .iter()
-            .copied()
-            .find(|m| m.row == pos.row && pos.col >= m.start && pos.col < m.end)
+        self.matches.iter().copied().find(|m| m.covers(pos))
     }
 }
 
@@ -153,31 +165,24 @@ mod tests {
         Buffer::from_text("foo bar foo\nbaz\nfoo end")
     }
 
+    fn p(row: usize, col: usize) -> Pos {
+        Pos { row, col }
+    }
+
+    /// Single-row match spanning cols `start..=end` (both inclusive).
+    fn hit(row: usize, start: usize, end: usize) -> Match {
+        Match {
+            start: Pos { row, col: start },
+            end: Pos { row, col: end },
+        }
+    }
+
     #[test]
     fn finds_all_matches_with_char_indices() {
         let b = buf();
         let mut s = Search::default();
         s.run(&b, "foo", Direction::Forward);
-        assert_eq!(
-            s.matches,
-            vec![
-                Match {
-                    row: 0,
-                    start: 0,
-                    end: 3
-                },
-                Match {
-                    row: 0,
-                    start: 8,
-                    end: 11
-                },
-                Match {
-                    row: 2,
-                    start: 0,
-                    end: 3
-                },
-            ]
-        );
+        assert_eq!(s.matches, vec![hit(0, 0, 2), hit(0, 8, 10), hit(2, 0, 2)]);
     }
 
     #[test]
@@ -193,14 +198,7 @@ mod tests {
         let b = Buffer::from_text("Foo foo FOO");
         let mut s = Search::default();
         s.run(&b, "Foo", Direction::Forward);
-        assert_eq!(
-            s.matches,
-            vec![Match {
-                row: 0,
-                start: 0,
-                end: 3
-            }]
-        );
+        assert_eq!(s.matches, vec![hit(0, 0, 2)]);
     }
 
     #[test]
@@ -211,14 +209,7 @@ mod tests {
             ..Default::default()
         };
         s.run(&b, "foo", Direction::Forward);
-        assert_eq!(
-            s.matches,
-            vec![Match {
-                row: 0,
-                start: 4,
-                end: 7
-            }]
-        );
+        assert_eq!(s.matches, vec![hit(0, 4, 6)]);
     }
 
     #[test]
@@ -234,14 +225,7 @@ mod tests {
         let b = Buffer::from_text("\u{4e2d}\u{6587}foo");
         let mut s = Search::default();
         s.run(&b, "foo", Direction::Forward);
-        assert_eq!(
-            s.matches,
-            vec![Match {
-                row: 0,
-                start: 2,
-                end: 5
-            }]
-        );
+        assert_eq!(s.matches, vec![hit(0, 2, 4)]);
     }
 
     #[test]
@@ -249,11 +233,8 @@ mod tests {
         let b = buf();
         let mut s = Search::default();
         s.run(&b, "foo", Direction::Forward);
-        let m = s
-            .seek(Pos { row: 2, col: 1 }, Direction::Forward, false)
-            .unwrap();
-        assert_eq!(m.row, 0);
-        assert_eq!(m.start, 0);
+        let m = s.seek(p(2, 1), Direction::Forward, false).unwrap();
+        assert_eq!(m.start, p(0, 0));
     }
 
     #[test]
@@ -261,14 +242,10 @@ mod tests {
         let b = buf();
         let mut s = Search::default();
         s.run(&b, "foo", Direction::Forward);
-        let m = s
-            .seek(Pos { row: 0, col: 0 }, Direction::Forward, true)
-            .unwrap();
-        assert_eq!((m.row, m.start), (0, 0));
-        let m = s
-            .seek(Pos { row: 0, col: 0 }, Direction::Forward, false)
-            .unwrap();
-        assert_eq!((m.row, m.start), (0, 8));
+        let m = s.seek(p(0, 0), Direction::Forward, true).unwrap();
+        assert_eq!(m.start, p(0, 0));
+        let m = s.seek(p(0, 0), Direction::Forward, false).unwrap();
+        assert_eq!(m.start, p(0, 8));
     }
 
     #[test]
@@ -276,10 +253,8 @@ mod tests {
         let b = buf();
         let mut s = Search::default();
         s.run(&b, "foo", Direction::Backward);
-        let m = s
-            .seek(Pos { row: 0, col: 0 }, Direction::Backward, false)
-            .unwrap();
-        assert_eq!(m.row, 2);
+        let m = s.seek(p(0, 0), Direction::Backward, false).unwrap();
+        assert_eq!(m.start.row, 2);
     }
 
     #[test]
@@ -288,10 +263,10 @@ mod tests {
         let mut s = Search::default();
         s.run(&b, "foo", Direction::Backward);
         // n with a backward search keeps going backward.
-        let m = s.next(Pos { row: 2, col: 0 }).unwrap();
-        assert_eq!((m.row, m.start), (0, 8));
-        let m = s.prev(Pos { row: 0, col: 8 }).unwrap();
-        assert_eq!((m.row, m.start), (2, 0));
+        let m = s.next(p(2, 0)).unwrap();
+        assert_eq!(m.start, p(0, 8));
+        let m = s.prev(p(0, 8)).unwrap();
+        assert_eq!(m.start, p(2, 0));
     }
 
     #[test]
