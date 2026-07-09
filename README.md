@@ -16,6 +16,9 @@ upstream [discussion #563](https://github.com/ogulcancelik/herdr/discussions/563
 this plugin fills that gap until it lands natively - the planned exit
 is written down in [docs/ROADMAP.md](docs/ROADMAP.md).
 
+Docs site (with the demos playing inline, which github.com will not do):
+<https://qq88976321.github.io/herdr-copy-search/>.
+
 ## Status
 
 Personal tool, built with heavy AI assistance (Claude Code). I review

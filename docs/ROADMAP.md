@@ -232,10 +232,17 @@ user is the author.
 | P3.1 | [ ] README media embedded (GIFs from P1.4) | S | P1.4 |
 | P3.2 | [ ] Install path verified from GitHub + version badge | S | P0.1, P1.1 |
 | P3.3 | [ ] Optional: announce (herdr Discussions, r/commandline) | S | P3.1 |
+| P3.4 | [~] User-facing docs site (Zensical, GitHub Pages); authored, deploy UNVERIFIED | M | P0.1, P1.4 |
 
 P3.3 is optional and only after P0-P2 core items feel solid; an
 announcement invites users, users invite support expectations - the
 disclosure section sets those expectations first.
+
+- P3.4: website/ holds a Zensical (Material-for-MkDocs team) project -
+  Home/Install/Modes, sourced from the README author voice - deployed
+  by .github/workflows/pages.yml. Unlike the README, the site can play
+  the demo/*.mp4 clips inline. Deploy stays UNVERIFIED until the repo
+  is pushed and Pages is enabled (Settings -> Pages -> GitHub Actions).
 
 ## In-place search (no separate pane/layout) - status: BLOCKED UPSTREAM
 
