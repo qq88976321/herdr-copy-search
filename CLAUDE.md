@@ -18,6 +18,8 @@ from `../agent-os/INDEX.md`. This file only adds repo-specific facts.
 - Toolchain: `cargo` from rustup (`~/.cargo/bin/cargo`), `just` via
   mise. Rust edition 2021. Only 4 crates: base64, crossterm, regex,
   unicode-width. Do not add dependencies without user confirmation.
+  Dev tools installed out-of-band (NOT Cargo deps): cargo-release,
+  git-cliff (CHANGELOG.md, config in cliff.toml).
 - `herdr-plugin.toml` is the plugin manifest; its `version` must stay
   in lockstep with Cargo.toml (release.toml automates this - never
   bump either by hand).
@@ -33,9 +35,10 @@ just test      # unit tests only
 just run mode  # manual run against fixtures/sample.txt (needs a
                #   real terminal; do not run headless)
 just link      # register checkout as linked herdr plugin + build
-just release   # cargo-release: bump, sync manifest, commit, tag.
-               #   USER-ONLY: run it only when the user asks for a
-               #   release. It creates a commit and a local tag.
+just release   # cargo-release: gate, bump, sync manifest, regenerate
+               #   CHANGELOG.md (git-cliff), commit, tag. USER-ONLY:
+               #   run it only when the user asks for a release. It
+               #   creates a commit and a local tag.
 ```
 
 ## Docs map

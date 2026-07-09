@@ -70,6 +70,7 @@ clean exit.
 | P1.3 | [~] Lints + MSRV (MSRV 1.74 verified locally; CI job pending P1.1) | S | - | CL-05 |
 | P1.4 | [~] Reproducible README demos (tapes authored, UNVERIFIED) | M | - | CL-04 |
 | P1.5 | [x] Dev process documented | S | - | CL-06 |
+| P1.6 | [~] Changelog via git-cliff (config + release wiring done; GH release-notes UNVERIFIED) | S | P1.2 | CL-03 |
 
 - P1.1: .github/workflows/ci.yml mirrors `just gate` (fmt, clippy
   -D warnings, test+build on ubuntu+macos, --locked) plus cargo-audit.
@@ -98,6 +99,12 @@ clean exit.
   embedded in README, and regeneration procedure verified once.
 - P1.5: CL-06 encodes the repo dev loop (TDD, gate, manual TTY test,
   demo regeneration, conventional commit).
+- P1.6: cliff.toml drives git-cliff (a dev tool, not a Cargo dep) to
+  derive a Keep-a-Changelog CHANGELOG.md from the Conventional Commits
+  the repo already mandates. The cargo-release release-hook regenerates
+  it per release; release.yml curates the GitHub Release body from it
+  (orhun/git-cliff-action). The release-notes wiring stays UNVERIFIED
+  until the first tag push (CL-03 step 6).
 
 ## Phase 2 - features, ranked by evidence
 
