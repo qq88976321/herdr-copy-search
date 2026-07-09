@@ -11,6 +11,9 @@ herdr plugin link /path/to/herdr-copy-search
 cargo build --release --locked                   # link does not run build steps
 ```
 
+There is no separate plugin update in v1; reinstall from the git host
+to refresh a managed plugin.
+
 ## Keybindings
 
 Bind keys in `~/.config/herdr/config.toml` (reload with
