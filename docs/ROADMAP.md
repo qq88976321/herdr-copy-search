@@ -41,7 +41,7 @@ clean exit.
 
 | ID | Item | Effort | Checklist |
 |----|------|--------|-----------|
-| P0.1 | [ ] Publish to GitHub | S | CL-01 |
+| P0.1 | [~] Publish to GitHub (public; CI green + v0.1.3 binaries; clean-config install pending) | S | CL-01 |
 | P0.2 | [x] AI-assistance disclosure in README | S | - |
 | P0.3 | [ ] Submit to awesome-herdr | S | CL-01 |
 
@@ -49,6 +49,8 @@ clean exit.
   `tmux`, `rust`, `terminal`), description, verify
   `herdr plugin install <owner>/herdr-copy-search` works end to end.
   Done when: install-from-GitHub works on a clean machine/config.
+  STATUS 2026-07-09: repo is public (qq88976321), CI green, v0.1.3
+  release with binaries; only the clean-config install check remains.
 - P0.2: soft disclosure, per 2025-2026 community norms research:
   backlash targets unreviewed, un-owned code, not AI assistance
   itself (see RedMonk "AI slopageddon" 2026-02; Ghostty is itself
@@ -65,12 +67,12 @@ clean exit.
 
 | ID | Item | Effort | Depends | Checklist |
 |----|------|--------|---------|-----------|
-| P1.1 | [~] CI pipeline (authored, UNVERIFIED) | S | P0.1 | CL-02 |
-| P1.2 | [~] Release artifacts workflow (authored, UNVERIFIED) | S | P1.1 | CL-03 |
-| P1.3 | [~] Lints + MSRV (MSRV 1.74 verified locally; CI job pending P1.1) | S | - | CL-05 |
-| P1.4 | [~] Reproducible README demos (tapes authored, UNVERIFIED) | M | - | CL-04 |
+| P1.1 | [x] CI pipeline (green on GitHub, run on 0ea3661) | S | P0.1 | CL-02 |
+| P1.2 | [x] Release artifacts workflow (v0.1.3 attached linux + macOS binaries) | S | P1.1 | CL-03 |
+| P1.3 | [~] Lints + MSRV (MSRV 1.74 verified locally 2026-07-07; CI msrv job still commented out) | S | - | CL-05 |
+| P1.4 | [x] Reproducible README demos (MP4 recorded in a real herdr session, embedded) | M | - | CL-04 |
 | P1.5 | [x] Dev process documented | S | - | CL-06 |
-| P1.6 | [~] Changelog via git-cliff (config + release wiring done; GH release-notes UNVERIFIED) | S | P1.2 | CL-03 |
+| P1.6 | [x] Changelog via git-cliff (release notes generated on the v0.1.3 release) | S | P1.2 | CL-03 |
 
 - P1.1: .github/workflows/ci.yml mirrors `just gate` (fmt, clippy
   -D warnings, test+build on ubuntu+macos, --locked) plus cargo-audit.
@@ -78,7 +80,8 @@ clean exit.
   dtolnay/rust-toolchain, Swatinem/rust-cache@v2,
   taiki-e/install-action. Deliberately NOT cargo-dist (its steward
   axo wound down; treat as risky). Done when: all jobs green on
-  GitHub and the UNVERIFIED header comment is removed.
+  GitHub and the UNVERIFIED header comment is removed. MET 2026-07-09:
+  CI run on 0ea3661 = success; UNVERIFIED header dropped in this sync.
 - P1.2: .github/workflows/release.yml attaches linux/macos binaries
   to the GitHub Release on a v* tag via
   taiki-e/upload-rust-binary-action. Note: plugin installs build from
@@ -94,17 +97,19 @@ clean exit.
   rust-toolchain.toml pin.
 - P1.4: vhs tapes (demo/*.tape) drive the binary against
   fixtures/sample.txt in a plain terminal - keystrokes-as-code, so an
-  AI agent can regenerate GIFs after any UI change (this is how
-  ratatui maintains its example GIFs). Done when: GIFs generated,
+  AI agent can regenerate the clips after any UI change (this is how
+  ratatui maintains its example GIFs). Done when: clips generated,
   embedded in README, and regeneration procedure verified once.
+  DONE 2026-07-08: switched GIF->MP4, recorded inside a real herdr
+  session; regeneration via docker vhs (CL-04).
 - P1.5: CL-06 encodes the repo dev loop (TDD, gate, manual TTY test,
   demo regeneration, conventional commit).
 - P1.6: cliff.toml drives git-cliff (a dev tool, not a Cargo dep) to
   derive a Keep-a-Changelog CHANGELOG.md from the Conventional Commits
   the repo already mandates. The cargo-release release-hook regenerates
   it per release; release.yml curates the GitHub Release body from it
-  (orhun/git-cliff-action). The release-notes wiring stays UNVERIFIED
-  until the first tag push (CL-03 step 6).
+  (orhun/git-cliff-action). VERIFIED 2026-07-09: the git-cliff
+  release-notes job ran on the v0.1.3 release and attached the notes.
 
 ## Phase 2 - features, ranked by evidence
 
@@ -229,10 +234,10 @@ user is the author.
 
 | ID | Item | Effort | Depends |
 |----|------|--------|---------|
-| P3.1 | [ ] README media embedded (GIFs from P1.4) | S | P1.4 |
-| P3.2 | [ ] Install path verified from GitHub + version badge | S | P0.1, P1.1 |
+| P3.1 | [~] README media embedded (MP4 from P1.4; inline play needs Pages, site 404) | S | P1.4 |
+| P3.2 | [ ] Install path verified from GitHub + version badge (deps met, now unblocked) | S | P0.1, P1.1 |
 | P3.3 | [ ] Optional: announce (herdr Discussions, r/commandline) | S | P3.1 |
-| P3.4 | [~] User-facing docs site (Zensical, GitHub Pages); authored, deploy UNVERIFIED | M | P0.1, P1.4 |
+| P3.4 | [~] User-facing docs site (Zensical, GitHub Pages); authored + built, Pages not enabled (site 404) | M | P0.1, P1.4 |
 
 P3.3 is optional and only after P0-P2 core items feel solid; an
 announcement invites users, users invite support expectations - the
@@ -241,8 +246,9 @@ disclosure section sets those expectations first.
 - P3.4: website/ holds a Zensical (Material-for-MkDocs team) project -
   Home/Install/Modes, sourced from the README author voice - deployed
   by .github/workflows/pages.yml. Unlike the README, the site can play
-  the demo/*.mp4 clips inline. Deploy stays UNVERIFIED until the repo
-  is pushed and Pages is enabled (Settings -> Pages -> GitHub Actions).
+  the demo/*.mp4 clips inline. Deploy stays UNVERIFIED: the repo is now
+  public but GitHub Pages is NOT enabled yet (site 404). Enable once via
+  Settings -> Pages -> Source: GitHub Actions, then confirm a green run.
 
 ## In-place search (no separate pane/layout) - status: BLOCKED UPSTREAM
 
@@ -279,8 +285,11 @@ Unblock triggers (checked by CL-07):
 
 Run docs/checklists/CL-07-upstream-watch.md quarterly, or before
 starting any Phase 2 item, or when herdr updates beyond a patch
-release. Log findings in docs/upstream-log.md. Empirical facts that
-can silently change: the ~1000-line pane read cap (undocumented
+release. Log findings in docs/upstream-log.md. herdr is now 0.7.3
+(baseline was 0.7.1); the empirical contract was re-checked once on
+2026-07-08 (two-read trailing-whitespace asymmetry, see CLAUDE.md), but
+a full CL-07 run is still due before the next Phase-2 item. Empirical
+facts that can silently change: the ~1000-line pane read cap (undocumented
 upstream), OSC 52 forwarding timing (the 200 ms exit grace), overlay
 placement behavior, plugin manifest schema.
 
