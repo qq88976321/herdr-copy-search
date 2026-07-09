@@ -121,17 +121,29 @@ user is the author.
 
 | ID | Item | Effort | Evidence rank |
 |----|------|--------|---------------|
-| F1 | [~] User-defined patterns via plugin config, TTY check pending | M | #2 |
+| F1 | [x] User-defined patterns via plugin config | M | #2 |
 | F2 | [ ] Extract: jump-to-match (land in copy mode at the token) | S/M | #11 |
 | F3 | [ ] Open actions: file:line in $EDITOR, URL in browser | M/L | #4 |
 | F4 | [x] Search across soft-wrap boundaries | M | #10 |
-| F5 | [~] Word text objects (viw/vaw/viW/vaW), TTY check pending | S | #1 gap |
+| F5 | [x] Word text objects (viw/vaw/viW/vaW) | S | #1 gap |
 | F6 | [ ] Extract: multi-select (Tab-mark several tokens) | S/M | #13 |
 | F7 | [!] Copy last command output / prompt jump (OSC 133) | L | #5 |
-| F8 | [~] Smartcase toggle in search (`S`), TTY check pending | S | weak |
-| F9 | [~] Mode-row polish: accent badge + idle key hint (TTY check + GIF pending) | S/M | author req |
+| F8 | [x] Smartcase toggle in search (`S`) | S | weak |
+| F9 | [x] Mode-row polish: accent badge + idle key hint | S/M | author req |
 | F10 | [ ] Overlay reflow: rewrap logical lines to the overlay width | L | future/UX |
 | R1 | [x] Panic audit: none in non-test code; TUI panic-safe | S | robustness |
+
+TTY-verified 2026-07-09 (driven in a real herdr session via `herdr pane
+send-keys`, asserted with `herdr pane read`): F1 - custom `pattern_j`
+shows in the menu as `[j]` and activates (regex ran, 1 match) while
+`pattern_u = ""` removed `[u]rl`; F5 - `iw` reverse-selects exactly the
+inner word (indicator flips to VISUAL); F8 - a lowercase search matched
+case-insensitively (smartcase on, 5 hits) then dropped to case-sensitive
+on `S` (4 hits, "smartcase: off"); F9 - the badge renders themed + bold
+and the idle hint dim. F9 demos already show the styled row (re-recorded
+2026-07-08, after the styling landed), so no GIF regen was needed. The
+OSC 52 -> LOCAL clipboard leg is the one check left to the user (the
+clipboard lives on the workstation, not reachable from here).
 
 - F1: every mature tool converged on user regexes in config (extrakto
   redirects all pattern requests to its config; wezterm
