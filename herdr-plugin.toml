@@ -1,6 +1,6 @@
 id = "copy-search"
 name = "Copy Search"
-version = "0.1.2"
+version = "0.1.3"
 min_herdr_version = "0.7.0"
 description = "tmux-style copy mode, copycat pattern search, and extrakto token extraction for pane scrollback, copying via OSC 52"
 platforms = ["linux", "macos"]

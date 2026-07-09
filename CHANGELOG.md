@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 The format is based on Keep a Changelog, and this project adheres to
 Conventional Commits.
 
-## [Unreleased]
+## [0.1.3] - 2026-07-09
 
 ### Features
 
@@ -45,10 +45,24 @@ Conventional Commits.
 - Mark F4 done and record overlay reflow as future work
 - Record herdr two-read trailing-whitespace asymmetry
 - **demo**: Record demos inside a real herdr session
+- Bootstrap CHANGELOG.md from git history
+- Reference changelog in CL-03, roadmap, and tooling note
+- Add MIT LICENSE file
+- **site**: Scaffold Zensical project under website/
+- Link the docs site from README and roadmap
+- Note that refreshing a managed plugin means reinstalling (no separate update in v1)
+- **site**: Add repo content actions and GitHub header icon
 
 ### Build System
 
 - Verify MSRV at 1.74
+- Add cliff.toml for git-cliff changelog generation
+- **release**: Regenerate CHANGELOG.md via git-cliff pre-release hook
+
+### Continuous Integration
+
+- Generate GitHub Release notes with git-cliff
+- Add GitHub Pages deploy workflow + site justfile recipes
 
 ## [0.1.2] - 2026-07-07
 
