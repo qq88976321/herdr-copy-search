@@ -6,9 +6,12 @@
 # Release binaries are a convenience for humans; `herdr plugin
 # install` builds from source via herdr-plugin.toml [[build]].
 #
-# STATUS: UNVERIFIED - authored 2026-07-07 while the repo was
-# local-only; never executed. CL-03 step 6 verifies it on the first
-# tag push, then deletes this status block.
+# The release-notes job curates the Release body from CHANGELOG data
+# via git-cliff (cliff.toml) instead of GitHub's default auto-notes.
+#
+# STATUS: UNVERIFIED - authored 2026-07-07 (release-notes job added
+# 2026-07-08) while the repo was local-only; never executed. CL-03
+# step 6 verifies it on the first tag push, then deletes this block.
 name: release
 
 on:
@@ -19,7 +22,29 @@ permissions:
   contents: write
 
 jobs:
+  # Create the Release first, with notes curated by git-cliff, so the
+  # upload job attaches binaries to an already-described release.
+  release-notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # git-cliff needs full history and tags
+      - name: Generate release notes with git-cliff
+        id: git-cliff
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          OUTPUT: RELEASE_NOTES.md
+      - name: Create the GitHub Release with curated notes
+        uses: softprops/action-gh-release@v3
+        with:
+          body: ${{ steps.git-cliff.outputs.content }}
+
   upload:
+    needs: release-notes
     strategy:
       fail-fast: false
       matrix:
