@@ -40,6 +40,14 @@ link:
     herdr plugin link .
     cargo build --release --locked
 
+# Install this plugin from its public GitHub repo (the end-user path),
+# to smoke-test that the published tree installs cleanly. Optional ref
+# pins a branch/tag/sha (default: the repo's default branch, master).
+# Conflicts with `just link`: both register plugin id `copy-search`, so
+# run `herdr plugin unlink copy-search` first if a local link is active.
+install-remote ref="":
+    herdr plugin install qq88976321/herdr-copy-search {{ if ref == "" { "" } else { "--ref " + ref } }} --yes
+
 # Bump version, sync manifests, tag vX.Y.Z locally (no push).
 release level="patch":
     cargo release {{level}} --execute
