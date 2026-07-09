@@ -8,10 +8,6 @@
 #
 # The release-notes job curates the Release body from CHANGELOG data
 # via git-cliff (cliff.toml) instead of GitHub's default auto-notes.
-#
-# STATUS: UNVERIFIED - authored 2026-07-07 (release-notes job added
-# 2026-07-08) while the repo was local-only; never executed. CL-03
-# step 6 verifies it on the first tag push, then deletes this block.
 name: release
 
 on:
