@@ -35,17 +35,15 @@ release-hook:
 run mode="copy":
     cargo run -- --input fixtures/sample.txt --mode {{mode}}
 
-# Register this checkout as a linked herdr plugin.
+# Switch to local dev: (re)link this checkout, clearing any prior install.
 link:
+    -herdr plugin uninstall copy-search   # clear any prior link/install first
     herdr plugin link .
     cargo build --release --locked
 
-# Install this plugin from its public GitHub repo (the end-user path),
-# to smoke-test that the published tree installs cleanly. Optional ref
-# pins a branch/tag/sha (default: the repo's default branch, master).
-# Conflicts with `just link`: both register plugin id `copy-search`, so
-# run `herdr plugin unlink copy-search` first if a local link is active.
+# Switch to remote: install the published GitHub plugin (end-user path); pass a ref to pin.
 install-remote ref="":
+    -herdr plugin uninstall copy-search   # clear any prior link/install first
     herdr plugin install qq88976321/herdr-copy-search {{ if ref == "" { "" } else { "--ref " + ref } }} --yes
 
 # Bump version, sync manifests, tag vX.Y.Z locally (no push).
