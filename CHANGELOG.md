@@ -4,6 +4,31 @@ All notable changes to this project are documented in this file.
 The format is based on Keep a Changelog, and this project adheres to
 Conventional Commits.
 
+## [0.1.4] - 2026-07-09
+
+### Features
+
+- **input**: Jump by word with Ctrl+Left/Right in the line editor
+
+### Documentation
+
+- **roadmap**: Sync statuses to public + CI/release-green reality
+- **roadmap**: Mark F1/F5/F8/F9 done after TTY verification
+- Reconcile CLAUDE.md/CL-05/upstream-log with current state
+
+### Testing
+
+- **ui**: Cover mode_hint truncation at a narrow row width
+
+### Continuous Integration
+
+- Drop UNVERIFIED headers now that CI and release are green
+
+### Miscellaneous
+
+- **just**: Add install-remote recipe to smoke-test the published plugin
+- **just**: Self-heal link/install-remote so one command switches modes
+
 ## [0.1.3] - 2026-07-09
 
 ### Features
