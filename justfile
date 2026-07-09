@@ -12,12 +12,20 @@ build:
 test:
     cargo test
 
-# Full quality gate; also used as the cargo-release pre-release hook.
+# Full quality gate; run before every commit.
 gate:
     cargo fmt --check
     cargo clippy --all-targets -- -D warnings
     cargo test
     cargo build --release
+
+# cargo-release pre-release hook: run the gate, then regenerate
+# CHANGELOG.md for the release being prepared. cargo-release sets
+# NEW_VERSION and DRY_RUN; on a dry run the changelog is left untouched
+# so the working tree stays clean. Needs git-cliff on PATH.
+release-hook:
+    just gate
+    if [ "$DRY_RUN" != "true" ]; then git-cliff --tag "v${NEW_VERSION}" -o CHANGELOG.md; fi
 
 # Manual run against the fixture (needs a real terminal).
 run mode="copy":
