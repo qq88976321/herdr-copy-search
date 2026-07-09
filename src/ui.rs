@@ -636,6 +636,27 @@ mod tests {
     }
 
     #[test]
+    fn mode_hint_truncates_to_row_width() {
+        // The draw path clips the hint with truncate_to_width when the
+        // mode row is narrower than the hint (ui.rs draw). Rendering is
+        // TTY-only, so verify that same composition here.
+        let a = app("hello");
+        let hint = mode_hint(&a).expect("hint in normal mode");
+        assert!(hint.chars().count() > 20, "full hint is wide: {hint}");
+        let clipped = truncate_to_width(hint.clone(), 20);
+        assert!(
+            clipped.chars().count() < 20,
+            "clip fits the row: {clipped:?}"
+        );
+        assert!(
+            clipped.chars().count() < hint.chars().count(),
+            "clip is shorter"
+        );
+        assert!(hint.starts_with(&clipped), "clip is a prefix of the hint");
+        assert!(!clipped.is_empty(), "some hint survives at width 20");
+    }
+
+    #[test]
     fn spans_mark_current_match_and_other_matches() {
         // Search opened from the bottom wraps to row 0 as current.
         let a = searched("foo bar foo", "foo");
