@@ -1,11 +1,13 @@
 # CL-05: verify MSRV and tighten lints stepwise
 
 Context: Cargo.toml gained [lints.rust]/[lints.clippy] tables and
-`rust-version = "1.74"` on 2026-07-07. The 1.74 value is an
-UNVERIFIED floor chosen because the [lints] table itself requires
-cargo >= 1.74; the true MSRV was never measured. The lint set is
-deliberately conservative; this checklist verifies the MSRV and
-optionally tightens lints.
+`rust-version = "1.74"` on 2026-07-07. That day (commit a3acc36) the
+1.74 floor was VERIFIED to build - source + locked deps compile on
+1.74.0 - so it is an enforced floor now. Still outstanding: `cargo msrv
+find` (the true-minimum bisect, step 2 below) was not run, and the CI
+msrv job (step 4) remains commented out. The lint set is deliberately
+conservative; this checklist finishes the MSRV story (true minimum + CI
+enforcement) and optionally tightens lints.
 
 Part 1 - verify MSRV:
 1. [ ] Install: `cargo install cargo-msrv --locked` (or download from

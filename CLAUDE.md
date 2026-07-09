@@ -8,13 +8,17 @@ README.md; this file is the development contract.
 Workspace-wide procedure (routing, checklists, commit rules) comes
 from `../agent-os/INDEX.md`. This file only adds repo-specific facts.
 
-## Quick facts (verified 2026-07-07)
+## Quick facts (verified 2026-07-09)
 
-- Local-only repo: NO remote yet, branch `master`, tags like
-  `v0.1.1`. Publishing is planned (docs/checklists/CL-01); until the
-  first push, the local gate below is the entire gate and the
-  .github/workflows/ and demo/ files are authored-but-UNVERIFIED
-  scaffolding (each carries a STATUS header naming its checklist).
+- Published: PUBLIC GitHub repo `qq88976321/herdr-copy-search`, branch
+  `master`, tags v0.1.1..v0.1.3 on origin. CI and release workflows are
+  VERIFIED green (CI on master; the v0.1.3 release attached binaries +
+  git-cliff notes); only `.github/workflows/pages.yml` stays UNVERIFIED
+  (GitHub Pages not enabled yet, site 404).
+- Branching: develop on `dev`; merge to `master` only when stable.
+  `herdr plugin install` pulls from master by default, so master must
+  stay installable at all times. Releases (`just release`, USER-ONLY)
+  are cut on master.
 - Toolchain: `cargo` from rustup (`~/.cargo/bin/cargo`), `just` via
   mise. Rust edition 2021. Only 4 crates: base64, crossterm, regex,
   unicode-width. Do not add dependencies without user confirmation.
