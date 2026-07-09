@@ -68,6 +68,36 @@ impl LineEdit {
         self.cursor = (self.cursor + 1).min(self.chars.len());
     }
 
+    /// Move to the start of the current or previous word (Ctrl+Left):
+    /// skip any whitespace left of the cursor, then the run of
+    /// non-whitespace before that. Whitespace-only boundaries, matching
+    /// delete_word_back so "word" means the same for Ctrl-W and Ctrl+Left.
+    fn word_left(&mut self) {
+        let mut i = self.cursor;
+        while i > 0 && self.chars[i - 1].is_whitespace() {
+            i -= 1;
+        }
+        while i > 0 && !self.chars[i - 1].is_whitespace() {
+            i -= 1;
+        }
+        self.cursor = i;
+    }
+
+    /// Move past the end of the current or next word (Ctrl+Right): skip
+    /// any whitespace right of the cursor, then the run of non-whitespace
+    /// after that. Symmetric with word_left.
+    fn word_right(&mut self) {
+        let len = self.chars.len();
+        let mut i = self.cursor;
+        while i < len && self.chars[i].is_whitespace() {
+            i += 1;
+        }
+        while i < len && !self.chars[i].is_whitespace() {
+            i += 1;
+        }
+        self.cursor = i;
+    }
+
     pub fn home(&mut self) {
         self.cursor = 0;
     }
@@ -118,6 +148,8 @@ impl LineEdit {
             KeyCode::Char(c) if !ctrl => self.insert(c),
             KeyCode::Backspace => self.backspace(),
             KeyCode::Delete => self.delete(),
+            KeyCode::Left if ctrl => self.word_left(),
+            KeyCode::Right if ctrl => self.word_right(),
             KeyCode::Left => self.left(),
             KeyCode::Right => self.right(),
             KeyCode::Home => self.home(),
@@ -146,6 +178,10 @@ mod tests {
 
     fn ctrl(c: char) -> KeyEvent {
         KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
+    }
+
+    fn ctrl_key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::CONTROL)
     }
 
     #[test]
@@ -261,6 +297,45 @@ mod tests {
         assert_eq!(le.cursor(), 1);
         assert!(le.handle_key(ctrl('f')));
         assert_eq!(le.cursor(), 2);
+    }
+
+    #[test]
+    fn ctrl_left_and_right_jump_by_word() {
+        // Whitespace-only boundaries: "foo.bar" is a single word.
+        let mut le = edit("foo.bar baz");
+        assert_eq!(le.cursor(), 11);
+        assert!(le.handle_key(ctrl_key(KeyCode::Left)));
+        assert_eq!(le.cursor(), 8, "left lands at the start of 'baz'");
+        assert!(le.handle_key(ctrl_key(KeyCode::Left)));
+        assert_eq!(le.cursor(), 0, "left skips the space and all of 'foo.bar'");
+
+        assert!(le.handle_key(ctrl_key(KeyCode::Right)));
+        assert_eq!(le.cursor(), 7, "right lands just past 'foo.bar'");
+        assert!(le.handle_key(ctrl_key(KeyCode::Right)));
+        assert_eq!(le.cursor(), 11, "right skips the space and all of 'baz'");
+    }
+
+    #[test]
+    fn word_jump_clamps_and_crosses_edge_whitespace() {
+        // Trailing/leading whitespace is skipped before the word run.
+        let mut le = edit("  hi  ");
+        assert!(le.handle_key(ctrl_key(KeyCode::Left)));
+        assert_eq!(
+            le.cursor(),
+            2,
+            "left from the end reaches the start of 'hi'"
+        );
+        assert!(le.handle_key(ctrl_key(KeyCode::Left)));
+        assert_eq!(le.cursor(), 0, "another left clamps at the start");
+
+        assert!(le.handle_key(ctrl_key(KeyCode::Right)));
+        assert_eq!(
+            le.cursor(),
+            4,
+            "right from the start reaches the end of 'hi'"
+        );
+        assert!(le.handle_key(ctrl_key(KeyCode::Right)));
+        assert_eq!(le.cursor(), 6, "another right clamps at the end");
     }
 
     #[test]
