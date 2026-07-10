@@ -5,11 +5,11 @@ pane scrollback, plus tmux-copycat-style predefined pattern search and
 extrakto-style token extraction. All copying goes through OSC 52, so it
 works over SSH without any clipboard helper on the remote host.
 
-<!-- github.com does not play a repo-relative <video> src inline. For an
-inline player, upload demo/copy.mp4 through the web UI (drag it into the
-README/issue editor) and swap src for the returned user-attachments URL.
-See https://github.blog/news-insights/product-news/video-uploads-available-github/ -->
-<video src="demo/copy.mp4" controls width="100%"></video>
+<!-- github.com will not play a repo-relative <video> src inline, so the
+README embeds committed GIFs derived from the mp4s (regenerate with
+`just gifs`; see docs/checklists/CL-04). The crisp mp4s play inline on the
+docs site linked below. -->
+![copy/search mode demo](demo/copy.gif)
 
 herdr has a native copy mode but no scrollback search yet (see
 upstream [discussion #563](https://github.com/ogulcancelik/herdr/discussions/563));
@@ -152,7 +152,7 @@ Like `fzf --height`, the picker occupies only the bottom of the overlay
 (default 40%); the pane content stays visible above it in its original
 colors.
 
-<video src="demo/extract.mp4" controls width="100%"></video>
+![extract mode demo](demo/extract.gif)
 
 Popup height: pass `--height PCT` in the pane command, or set it in
 the plugin config file (path from `herdr plugin config-dir copy-search`):
@@ -207,8 +207,9 @@ Where things are headed and how work gets done here:
 [docs/ROADMAP.md](docs/ROADMAP.md) (evidence-based roadmap, archive
 conditions) and [docs/checklists/](docs/checklists/) (step-by-step
 procedures: publishing, CI, releases, demo recording, feature loop,
-upstream watch). README demo GIFs are scripted in [demo/](demo/) as
-vhs tapes so they can be regenerated after any UI change.
+upstream watch). The demos are scripted in [demo/](demo/) as vhs tapes
+rendered to mp4, with `just gifs` deriving the README's inline GIFs, so
+both regenerate after any UI change.
 
 ## Design notes
 
