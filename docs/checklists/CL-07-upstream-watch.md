@@ -15,12 +15,23 @@ visible.
        https://github.com/ogulcancelik/herdr/blob/main/CHANGELOG.md
        Search for: "copy mode", "search", "plugin", "pane read",
        "clipboard", "OSC". Note anything relevant.
-3. [ ] Native search demand thread still open/unanswered?
-       https://github.com/ogulcancelik/herdr/discussions/563
-4. [ ] Copy-mode plugin API: fetch https://herdr.dev/docs/plugins/
-       and check whether the sentence "No API exists for extending
-       or overriding copy mode" is still present. Its disappearance
-       is trigger A2 in the roadmap archive table.
+3. [ ] Native search release status. History: Discussion #563 was
+       folded into issue #1230, which merged literal smartcase
+       `/` `?` `n` `N` search + match highlighting to master on
+       2026-07-10 (UNRELEASED at that date).
+       https://github.com/ogulcancelik/herdr/issues/1230
+       Check whether a STABLE release now includes it; the first one
+       that does STARTS the A1 two-week native trial (roadmap
+       archive table).
+4. [ ] Copy-mode plugin API: fetch https://herdr.dev/docs/plugins/.
+       The old sentinel sentence ("No API exists for extending or
+       overriding copy mode") was removed in a 2026-07 docs reorg
+       WITHOUT any API shipping. New sentinel: the docs still say
+       "Runtime action registration and native non-terminal plugin
+       UI are not part of plugin v1" and still describe no way to
+       extend or override copy mode. If that statement disappears or
+       a copy-mode extension API appears, evaluate trigger A2 in the
+       roadmap archive table.
 5. [ ] Competitor check: any plugin doing scrollback SEARCH (not just
        visible-screen hints)?
        - https://github.com/rmarganti/herdr-pluck (recent releases?)
@@ -30,8 +41,10 @@ visible.
          updated
 6. [ ] Tracked upstream issues - state changes?
        #680 (copy mode follows live output), #970 (vim word
-       boundaries), #785/#812 (floating plugin surfaces), #893
-       (plugin registry clobber), #978 (--lines 0 empty).
+       boundaries), #1000 (CJK glyph stops), #1125 (floating popup
+       panes for plugins; successor of the closed-not-planned
+       #785/#812), #893 + #1174 (plugin registry clobber /
+       persistence across sessions).
 
 ## Re-verify empirical contract (only if herdr version changed)
 
