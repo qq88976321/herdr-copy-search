@@ -50,6 +50,15 @@ install-remote ref="":
 release level="patch":
     cargo release {{level}} --execute
 
+# Derive small looping GIFs (demo/*.gif) from the demo mp4s for inline
+# playback in the GitHub README (github.com will not play a repo-relative
+# <video>). Uses the vhs image's ffmpeg (no native ffmpeg on the host); run
+# with the sandbox off (docker). Rerun after regenerating the mp4s (CL-04).
+gifs:
+    docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+      -v "$PWD/demo":/demo \
+      --entrypoint sh ghcr.io/charmbracelet/vhs /demo/mp4-to-gif.sh
+
 # Build the docs site (website/, Zensical) with demo videos copied in.
 # Runs Zensical via uvx; needs uv on PATH (no venv to activate).
 site-build:
