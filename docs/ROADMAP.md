@@ -6,8 +6,10 @@ conditions" at the bottom).
 
 Provenance: researched 2026-07-07 (herdr v0.7.1) from upstream
 trackers, tmux/zellij/wezterm/kitty ecosystems, and community threads;
-every claim cites its source. Re-verify time-sensitive facts with
-docs/checklists/CL-07-upstream-watch.md before acting on them.
+refreshed 2026-07-10 (full CL-07 run, herdr v0.7.3 latest tag; see
+docs/upstream-log.md). Every claim cites its source. Re-verify
+time-sensitive facts with docs/checklists/CL-07-upstream-watch.md
+before acting on them.
 
 How to use this file: pick the highest unfinished item whose
 dependencies are done, follow its checklist (docs/checklists/), meet
@@ -19,23 +21,31 @@ Status legend: [ ] todo, [x] done, [~] partial/in progress,
 
 ## Positioning (why this plugin should exist at all)
 
-- herdr has a native copy mode (`prefix+[`, upstream issue #231) but
-  NO scrollback search: no `/` `?` in copy mode and no search
-  subcommand. Users ask for it in unanswered Discussion #563
-  ("Add / and ? search in copy mode").
-- Among 111 repos tagged `herdr-plugin` (2026-07), no other plugin
-  does scrollback regex search with in-place highlighting. Closest
-  neighbor is rmarganti/herdr-pluck: thumbs-style hints over VISIBLE
-  content only.
+- UPDATE 2026-07-10: herdr native copy-mode search is MERGED upstream
+  (issue #1230, closing Discussion #563) but UNRELEASED (latest tag
+  v0.7.3). It is literal-only smartcase `/` `?` with `n`/`N` and
+  match highlighting - no regex, no patterns, no extract, no
+  jump/open/paste actions. The first stable release that ships it
+  starts archive trigger A1 (two-week native trial).
+- This plugin's surviving edge is therefore everything AROUND raw
+  search: regex + smartcase, copycat-style patterns, extrakto-style
+  extraction, soft-wrap-aware matching, and actions on a match (jump,
+  open, paste-through). Phase 2 is re-ranked to invest only there;
+  copy-mode motion parity is frozen (see the Phase 2 posture note).
+- Among 136 repos tagged `herdr-plugin` (2026-07-10), still no other
+  plugin does scrollback regex search with in-place highlighting.
+  Neighbors are visible-screen only: rmarganti/herdr-pluck and
+  hotchpotch/herdr-tiny-fingers (thumbs/fingers-style hints),
+  iurysza/termscope (open visible files/links).
 - The core design (keyboard-driven selection over scrollback) matches
   the single most-demanded capability in neighboring ecosystems:
   zellij "keyboard select and copy" issue #947 (88 reactions) and
   word-boundary selection #1258 (147 reactions), wezterm copy-mode
   motions #4471 (21 reactions).
 
-So: unique niche, real demand, and an upstream that may eventually
-absorb it. Optimize for usefulness now, low maintenance cost, and a
-clean exit.
+So: unique niche, real demand, and an upstream that is actively
+absorbing the raw-search half (#1230). Optimize for usefulness now,
+low maintenance cost, and a clean exit.
 
 ## Phase 0 - publish and trust
 
@@ -119,6 +129,15 @@ appendix). Follow CL-06 for every item. Ordering within the phase is
 a recommendation; re-rank freely on personal need - the only real
 user is the author.
 
+Posture (user decision 2026-07-10, after upstream #1230): invest only
+in capabilities native search will NOT cover - regex, patterns,
+extract, actions, copy ergonomics. Copy-mode motion parity (f/F/t/T,
+`;`/`,`, numeric counts, W/B/E motions, marks, `*`/`#`, H/M/L,
+zt/zz/zb, block selection - all currently absent) is FROZEN until the
+A1 two-week native trial (see Archive conditions) has an outcome.
+Recommended order among open items, by differentiation value / cost:
+F2 > F6 > F11 > F3 > F12 > F13 > F14 > F15 > F16 > F17.
+
 | ID | Item | Effort | Evidence rank |
 |----|------|--------|---------------|
 | F1 | [x] User-defined patterns via plugin config | M | #2 |
@@ -131,6 +150,13 @@ user is the author.
 | F8 | [x] Smartcase toggle in search (`S`) | S | weak |
 | F9 | [x] Mode-row polish: accent badge + idle key hint | S/M | author req |
 | F10 | [ ] Overlay reflow: rewrap logical lines to the overlay width | L | future/UX |
+| F11 | [ ] Pattern capture-group copy (yank only group 1) | S | copycat #64 |
+| F12 | [ ] Copy joins soft-wraps + optional trailing-space trim | S/M | tmux #4995 |
+| F13 | [ ] Paste-through: send selection/match to source pane | S | extrakto #91 |
+| F14 | [ ] More built-in patterns (uuid, ipv6, hex color, ...) | S | thumbs/fingers |
+| F15 | [ ] Seed search/extract query from pane selection | S/M | extrakto #114 |
+| F16 | [ ] Search history + explicit literal toggle | S | tmux parity |
+| F17 | [ ] Extract config polish (min len, suffix, granularity) | S | extrakto #67 |
 | R1 | [x] Panic audit: none in non-test code; TUI panic-safe | S | robustness |
 
 TTY-verified 2026-07-09 (driven in a real herdr session via `herdr pane
@@ -168,6 +194,9 @@ clipboard lives on the workstation, not reachable from here).
   overlay cannot exec $EDITOR itself for the source pane - likely
   `herdr pane send-text` of an editor command, or a config-defined
   opener command; also check herdr link handlers as the URL path.
+  New material 2026-07-10: `[[link_handlers]]` (herdr 0.7.0+) route
+  ctrl-clicked URLs to a plugin action (HERDR_PLUGIN_CLICKED_URL),
+  and termscope / herdr-fzf-url prove openers are viable in-ecosystem.
   Done when: pattern/extract pick can open in editor/browser with a
   config-defined command, documented caveats.
 - F4: [DONE] real demand: tmux #966, copycat #59/#94, zellij #2853.
@@ -237,6 +266,54 @@ clipboard lives on the workstation, not reachable from here).
   the payoff beats the layout complexity before committing. Do NOT
   start without a CL-06 brainstorm; the logic-only fix (F4) already
   removes the correctness pain, leaving this as pure visual polish.
+- F11: when a pattern regex contains a capture group, highlight and
+  yank only group 1 instead of the whole match (copycat #64 asks for
+  exactly this; tmux-thumbs ships it). Applies to built-in and
+  user-defined patterns; menu unchanged. Enables "match the line,
+  copy the ID" patterns. Done when: a `pattern_<key>` with a group
+  copies only the group, README notes it, tests cover group vs
+  no-group regexes.
+- F12: copying a selection that spans soft-wrapped rows should join
+  the wrap (no injected newline) and optionally trim trailing pad
+  spaces; tmux itself gets this wrong (tmux #4995 wrap newlines +
+  padding, #4399 padding cells). Verify current behavior first:
+  search-match yanks already use logical spans (F4), but charwise
+  `v` and linewise `V` selections over a wrapped row may not. Done
+  when: a wrapped URL copies as one line, pad spaces are not copied
+  (or a config key controls trimming), tests.
+- F13: a key sends the current selection/match INTO the source pane
+  instead of the clipboard ("copy and paste immediately": extrakto
+  #91/#101, fingers `:paste:`, thumbs upcase). The extract insert
+  path (`herdr pane send-text`, main.rs) already does this; extend
+  it to copy/search mode. Decide the key in the CL-06 brainstorm.
+  Done when: paste-through works from copy mode, README key table
+  updated.
+- F14: extend patterns.rs with the classes thumbs/fingers ship that
+  we lack: uuid, ipv6, hex color, 0x hex number, docker image ref,
+  markdown-link URL (thumbs/fingers READMEs; copycat #57 is a
+  20-comment idea thread, #149 asks to disable single defaults -
+  `pattern_<key> = ""` already covers disabling). Menu width is the
+  constraint: only high-value classes get menu slots, the rest stay
+  reachable via `alt+<key>`. Done when: new patterns + tests +
+  README table updated.
+- F15: pre-fill the search prompt / extract query from the source
+  pane's active selection: plugin docs state HERDR_PLUGIN_CONTEXT_JSON
+  carries "selected text" (UNVERIFIED empirically - CL-07-style check
+  first: is the field populated for action invocations?). Same ask as
+  extrakto #114 (seed with cursor word), but herdr's context JSON
+  could make it cleaner than the tmux version. Done when: invoking
+  the plugin with an active selection seeds the query, documented.
+- F16: session-scoped search history (Up/Down in the search prompt
+  walks prior queries; the single `saved_pattern` slot in app.rs
+  becomes a list) plus an explicit literal-mode toggle to complement
+  regex (tmux has search-forward-text as a separate literal command;
+  invalid-regex-falls-back-to-literal already covers half). Done
+  when: history navigation + literal toggle + indicator hint + tests.
+- F17: flat-TOML keys for extract ergonomics: min token length
+  (hardcoded 3 today, extract.rs MIN_TOKEN_LEN), insert suffix
+  (extrakto #67/#97 ask for separator config), default granularity
+  word vs line (extrakto #72). Done when: keys parsed + applied +
+  README config table updated.
 - R1: audit unwrap/expect/panic in non-test code paths; each site
   either becomes an error path or gets a comment stating why it
   cannot fail. TUI must never panic mid-alt-screen (leaves the
@@ -282,11 +359,12 @@ close enough that the author accepted it; worth noting in the README as
 a recommended herdr setting. True in-place stays upstream-blocked below.
 
 Unblock triggers (checked by CL-07):
-- native `/` `?` search ships in herdr copy mode -> see Archive
-  conditions instead
+- native `/` `?` search ships in herdr copy mode (merged to master
+  2026-07-10 via #1230, unreleased) -> see Archive conditions instead
 - a copy-mode extension/override API ships -> port this plugin's
   search into it (major version)
-- floating/popup plugin surfaces ship (upstream #785, #812) -> the real
+- floating/popup plugin surfaces ship (upstream #1125, open with 9
+  reactions; the earlier #785/#812 were closed not_planned) -> the real
   fix here: today a plugin overlay renders full-window (`--placement`
   overlay == zoomed, verified 2026-07-07), so search cannot open inside
   just the current pane. A pane-scoped floating surface would confine it
@@ -297,13 +375,13 @@ Unblock triggers (checked by CL-07):
 
 Run docs/checklists/CL-07-upstream-watch.md quarterly, or before
 starting any Phase 2 item, or when herdr updates beyond a patch
-release. Log findings in docs/upstream-log.md. herdr is now 0.7.3
-(baseline was 0.7.1); the empirical contract was re-checked once on
-2026-07-08 (two-read trailing-whitespace asymmetry, see CLAUDE.md), but
-a full CL-07 run is still due before the next Phase-2 item. Empirical
-facts that can silently change: the ~1000-line pane read cap (undocumented
-upstream), OSC 52 forwarding timing (the 200 ms exit grace), overlay
-placement behavior, plugin manifest schema.
+release. Log findings in docs/upstream-log.md. Last full CL-07 run:
+2026-07-10 (herdr 0.7.3 latest tag; native search merged unreleased,
+#1230 - see the log entry). The next attention point is the NEXT
+STABLE herdr release: if it ships #1230, start the A1 two-week native
+trial. Empirical facts that can silently change: the ~1000-line pane
+read cap (undocumented upstream), OSC 52 forwarding timing (the 200 ms
+exit grace), overlay placement behavior, plugin manifest schema.
 
 ## Archive conditions
 
@@ -312,8 +390,8 @@ when the gap closes. Decision table - evaluate during CL-07 runs:
 
 | # | Condition | How to check | Action |
 |---|-----------|--------------|--------|
-| A1 | herdr STABLE release ships `/` `?` search in copy mode with match highlighting | herdr CHANGELOG + Discussion #563 | Try native for 2 weeks. If it covers daily use: archive. If patterns/extract still add value: strip to the surviving modes, note in README |
-| A2 | Copy-mode extension API ships | plugin docs sentence "No API exists for extending or overriding copy mode" disappears | Either port (new major) or archive in favor of a native-integrated successor |
+| A1 | herdr STABLE release ships `/` `?` search in copy mode with match highlighting | herdr CHANGELOG + issue #1230 (ARMED: merged unreleased 2026-07-10; first stable tag with it starts the trial) | Try native for 2 weeks. If it covers daily use: archive. If patterns/extract still add value: strip to the surviving modes, note in README |
+| A2 | Copy-mode extension API ships | CL-07 step 4 sentinel: plugins docs stop saying runtime action registration / native plugin UI are outside v1, or a copy-mode extension API appears (the old "No API exists..." sentence was removed 2026-07 in a docs reorg, no API shipped) | Either port (new major) or archive in favor of a native-integrated successor |
 | A3 | Another maintained plugin reaches scrollback-search parity | awesome-herdr + `herdr-plugin` topic search | Archive, link to it from README |
 | A4 | herdr breaks the plugin contract (pane read semantics, overlay placement) and fixing costs more than the plugin is worth | CI red + CL-07 | Pin last working herdr version in README, mark maintenance-only; archive if unused |
 | A5 | Author has not used it for 6 months | be honest | Archive |
@@ -341,6 +419,26 @@ herdr upstream (verified 2026-07-07, herdr v0.7.1):
   hints); list: https://github.com/yigitkonur/awesome-herdr
 - HN launch thread: https://news.ycombinator.com/item?id=48714802
 
+herdr upstream refresh (2026-07-10, v0.7.3 latest tag; full log in
+docs/upstream-log.md):
+- native search MERGED, unreleased:
+  https://github.com/ogulcancelik/herdr/issues/1230 (literal
+  smartcase `/` `?` `n` `N` + highlighting + cross-line w/b/e;
+  Discussion #563 closed into it; #1263 word-motion follow-up closed
+  same day)
+- floating surfaces: #1125 "Temporary floating popup panes for
+  plugins" (open, 9 reactions) supersedes #785/#812 (closed
+  not_planned); plugin registry: #893 + #1174 (3 reactions)
+- plugin-usable API surfaces: v0.7.2 pane scroll metrics +
+  pane.scroll_changed, `herdr terminal session observe`/`control`,
+  session.snapshot, `herdr api schema`; v0.7.0 [[link_handlers]]
+  (HERDR_PLUGIN_CLICKED_URL); docs claim context JSON carries
+  selected text + clicked URL (unverified, F15)
+- competitors (all visible-screen only): rmarganti/herdr-pluck
+  (unchanged), hotchpotch/herdr-tiny-fingers and iurysza/termscope
+  (both new, updated 2026-07-09); `herdr-plugin` topic at 136 repos
+- OSC 133 / prompt marks: still nothing upstream (F7 stays blocked)
+
 Cross-ecosystem demand (reaction counts as of 2026-07-07):
 - keyboard selection: zellij #1258 (147), #947 (88), #2989; tmux #140
   (28); wezterm #4471 (21)
@@ -361,6 +459,25 @@ Cross-ecosystem demand (reaction counts as of 2026-07-07):
 - insert/copy/paste flow: extrakto #2; wezterm quickselect docs
   (lowercase copies, uppercase copies+pastes)
 - weak evidence (deprioritized): case toggle, rectangular selection
+
+Cross-ecosystem additions (swept 2026-07-10, feeding F11-F17):
+- capture-group copy: copycat #64; tmux-thumbs README (built-in)
+- copy joins wraps / no padding: tmux #4995, #4399; tab handling
+  #4201 (44 comments)
+- paste-through: extrakto #91, #101; fingers `:paste:`; thumbs
+  upcase commands
+- pattern classes + management: thumbs/fingers README class lists;
+  copycat #57 (20-comment idea thread), #149 (disable a default)
+- seed query from cursor word/selection: extrakto #114
+- search history / literal mode: tmux search-forward-text (builtin
+  literal variant); copycat #70 already cited for incremental
+- extract token/config ergonomics: extrakto #67, #97 (separators),
+  #72 (default filter = lines)
+- cross-pane scrollback source: extrakto #63, #36; copycat #128
+  (deferred: reads are per-pane, UX unclear)
+- prompt stripping: copycat #132 (deferred: needs OSC 133 = F7)
+- perf narrative: copycat #129 "slow" (13 reactions), #123 ripgrep
+  proposal - Rust regex is a ready-made selling point for README
 
 AI disclosure norms:
 - policy catalog: https://github.com/melissawm/open-source-ai-contribution-policies
