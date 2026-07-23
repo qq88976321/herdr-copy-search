@@ -10,6 +10,65 @@ Append-only log of CL-07 runs (newest first). Entry template:
     - empirical contract: <re-verified/skipped (no version change)>
     - archive table: <no trigger / trigger Ax -> action taken>
 
+## 2026-07-23 (herdr v0.7.4 installed, v0.7.5 latest; full CL-07 run)
+
+Run triggered by a user-requested roadmap re-analysis. Two stable
+releases since the last run: v0.7.4 (2026-07-15), v0.7.5 (2026-07-21).
+
+- changelog: MAJOR - v0.7.4 SHIPS native copy-mode search (#1230):
+  literal smart-case `/` `?`, repeat `n`/`N`, match highlighting,
+  tmux-style cross-line w/b/e word motions. First STABLE release
+  with it -> archive trigger A1 STARTS (see below). v0.7.4 also
+  ships #1125: floating popup panes usable by plugins
+  (placement = "popup", session-modal, optional width/height cell
+  or percentage sizing, singleton per session, no tiled-layout
+  change) - the in-place item's watch target landed, in
+  session-modal (NOT pane-scoped) form. Also v0.7.4: copy mode
+  `$`/End now stops at the last visible char (#1405);
+  `ui.copy_on_select` toggle. v0.7.5 BREAKING (#1174): installed
+  and linked plugins are now global to the user instead of
+  per-session; plugins installed under 0.7.3 must be installed or
+  linked again (re-run `just link` after upgrading). v0.7.5 also
+  adds one-shot plugin `[[startup]]` hooks (not needed here: this
+  plugin is stateless) and `herdr config check` now flags unknown
+  config keys.
+- discussion #563: closed into #1230 since 2026-07-10; the feature
+  is now RELEASED. Known wart: #1667 (open, 2026-07-21) reports
+  native search highlighting does not cover the full match. No
+  upstream issue asks for regex/pattern search yet (searched
+  2026-07-23) - the differentiation surface is intact.
+- copy-mode API sentence: sentinel PRESENT - the plugins docs still
+  say "Runtime action registration and native non-terminal plugin
+  UI are not part of plugin v1" and still describe no way to extend
+  or override copy mode. A2 not triggered. Plugin pane placements
+  are now documented as overlay/popup/split/tab/zoomed.
+- competitors: still NO scrollback-search plugin. rmarganti/
+  herdr-pluck (12 stars, pushed 2026-07-14) and hotchpotch/
+  herdr-tiny-fingers stay visible-screen hints; newer visible-only
+  neighbors: RooseveltAdvisors/herdr-leap (EasyMotion-style jump +
+  select-to-copy), malone-c/herdr-keybind-search (keybind overlay,
+  not pane content). `herdr-plugin` topic: 305 repos (was 136 on
+  2026-07-10); the growth is mostly agent-sidebar tooling.
+  herdr-copy-search is still NOT listed in awesome-herdr (P0.3
+  open). A3 not triggered.
+- tracked issues: #1125 closed-shipped (v0.7.4); #1174
+  closed-shipped (v0.7.5, breaking); #893 closed-fixed
+  (2026-07-15); #680 / #970 / #1000 still open. OSC 133 / prompt
+  marks: still nothing upstream; F7 stays [!] blocked.
+- empirical contract: DUE (installed herdr moved 0.7.3 -> 0.7.4)
+  but SKIPPED this run - no running herdr session on this host and
+  steps 7-9 need a real TTY. Next TTY session: re-verify pane read
+  cap, OSC 52 grace, overlay behavior, AND characterize the new
+  popup placement (border drawn? manifest [[panes]] support?
+  sizing? where it anchors relative to the focused pane?).
+- archive table: A1 TRIGGERED - v0.7.4 (2026-07-15) is the first
+  stable release shipping native search. Per the table: two-week
+  native trial (ends ~2026-07-29 counted from the release), then
+  the USER decides archive vs strip-to-surviving-modes. Presented
+  to the user this run with a recommendation (strip-down likely:
+  native is literal-only, no patterns/extract/actions, and has an
+  open highlight bug). A2/A3/A4 not triggered.
+
 ## 2026-07-10 (herdr v0.7.3 installed, v0.7.3 latest; full CL-07 run)
 
 Full CL-07 run during a roadmap re-analysis (three-way research pass:
