@@ -17,7 +17,7 @@ site_name = "herdr-copy-search"
 # meaningful description of the site content for use by search engines.
 #
 # Read more: https://zensical.org/docs/setup/basics/#site_description
-site_description = "tmux-style copy mode with incremental search for herdr pane scrollback, plus copycat pattern search and extrakto token extraction, copying via OSC 52."
+site_description = "Regex and pattern search with extrakto-style token extraction for herdr pane scrollback, landing in a tmux-style copy mode to refine and yank, copying via OSC 52."
 
 # The site_author attribute. This is used in the HTML head element.
 #
