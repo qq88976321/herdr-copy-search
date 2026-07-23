@@ -1,20 +1,24 @@
 # herdr-copy-search
 
-tmux-style copy mode with incremental search for [herdr](https://herdr.dev)
-pane scrollback, plus tmux-copycat-style predefined pattern search and
-extrakto-style token extraction. All copying goes through OSC 52, so it
+Incremental regex search over [herdr](https://herdr.dev) pane
+scrollback, tmux-copycat-style predefined pattern search, and
+extrakto-style token extraction, with a tmux-style copy mode for
+refining and yanking matches. All copying goes through OSC 52, so it
 works over SSH without any clipboard helper on the remote host.
 
 <!-- github.com will not play a repo-relative <video> src inline, so the
 README embeds committed GIFs derived from the mp4s (regenerate with
 `just gifs`; see docs/checklists/CL-04). The crisp mp4s play inline on the
 docs site linked below. -->
-![copy/search mode demo](demo/copy.gif)
+![search/copy mode demo](demo/copy.gif)
 
-herdr has a native copy mode but no scrollback search yet (see
-upstream [discussion #563](https://github.com/ogulcancelik/herdr/discussions/563));
-this plugin fills that gap until it lands natively - the planned exit
-is written down in [docs/ROADMAP.md](docs/ROADMAP.md).
+Since v0.7.4 herdr's native copy mode has literal smart-case search
+built in - use it for plain browsing and literal lookups (it reads
+the full scrollback). This plugin covers what native does not: regex
++ smartcase incremental search that drops you into a copy mode at the
+match, predefined and user-defined patterns, token extraction, and
+soft-wrap-aware matching. The coexistence positioning and the exit
+conditions live in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Docs site (with the demos playing inline, which github.com will not do):
 <https://qq88976321.github.io/herdr-copy-search/>.
@@ -80,11 +84,14 @@ the overlay always covers the whole window (`--placement overlay` and
 `zoomed` render the same); confining it to a single pane awaits upstream
 floating surfaces.
 
-## Copy / search mode
+## Search / copy mode
 
 Opens an overlay over the focused pane showing its recent scrollback
 (the herdr server caps pane reads at about 1000 lines). The `search`
-entrypoint is the same view opened with the search prompt active.
+entrypoint opens with the search prompt active; committing a search
+lands in copy mode on the match - no scrolling - to refine the
+selection and yank. The `copy` entrypoint is the same view opened
+idle.
 
 | Keys | Action |
 | --- | --- |
