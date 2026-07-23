@@ -1,8 +1,10 @@
 # herdr-copy-search - repo constitution for agents
 
-Rust binary implementing a herdr plugin: tmux-style copy mode,
-copycat-style pattern search, and extrakto-style token extraction for
-pane scrollback, copying via OSC 52. User-facing usage lives in
+Rust binary implementing a herdr plugin: copycat-style regex/pattern
+search and extrakto-style token extraction over pane scrollback, with
+a tmux-style copy mode for refining and yanking matches, copying via
+OSC 52 (herdr >= 0.7.4 has native literal copy-mode search; this
+plugin covers what native does not). User-facing usage lives in
 README.md; this file is the development contract.
 
 Workspace-wide procedure (routing, checklists, commit rules) comes

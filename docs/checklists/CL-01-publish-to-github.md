@@ -16,7 +16,9 @@ Steps:
        `git push -u origin master` afterwards and set the default
        branch: `gh repo edit --default-branch master`.
 3. [ ] Set metadata:
-       `gh repo edit --description "tmux-style copy mode, copycat pattern search, and extrakto token extraction for herdr scrollback (OSC 52)" --add-topic herdr-plugin --add-topic herdr --add-topic copy-mode --add-topic tmux --add-topic terminal --add-topic rust`
+       `gh repo edit --description "regex and copycat pattern search with extrakto token extraction for herdr scrollback, landing in a tmux-style copy mode (OSC 52)" --add-topic herdr-plugin --add-topic herdr --add-topic copy-mode --add-topic tmux --add-topic terminal --add-topic rust`
+       (description updated 2026-07-23 for the coexistence
+       repositioning after native search shipped in herdr 0.7.4)
 4. [ ] Push existing tags: `git push origin --tags`.
 5. [ ] Verify CI: follow CL-02 now (first push just triggered it).
 6. [ ] Verify install path on a machine/config where the plugin is

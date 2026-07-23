@@ -2,7 +2,7 @@
 name = "herdr-copy-search"
 version = "0.1.4"
 edition = "2021"
-description = "tmux-style copy mode with incremental search for herdr scrollback"
+description = "regex and pattern search over herdr scrollback with token extraction and a tmux-style copy mode"
 license = "MIT"
 # MSRV floor. Verified 2026-07-07: the source and locked deps build on
 # 1.74.0, which is also the minimum for the [lints] table below.

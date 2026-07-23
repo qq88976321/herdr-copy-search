@@ -2,7 +2,7 @@ id = "copy-search"
 name = "Copy Search"
 version = "0.1.4"
 min_herdr_version = "0.7.0"
-description = "tmux-style copy mode, copycat pattern search, and extrakto token extraction for pane scrollback, copying via OSC 52"
+description = "regex and copycat pattern search with extrakto token extraction for pane scrollback, landing in a tmux-style copy mode, copying via OSC 52"
 platforms = ["linux", "macos"]
 
 [[build]]
