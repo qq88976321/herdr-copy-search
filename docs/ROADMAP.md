@@ -6,10 +6,11 @@ conditions" at the bottom).
 
 Provenance: researched 2026-07-07 (herdr v0.7.1) from upstream
 trackers, tmux/zellij/wezterm/kitty ecosystems, and community threads;
-refreshed 2026-07-10 (full CL-07 run, herdr v0.7.3 latest tag; see
-docs/upstream-log.md). Every claim cites its source. Re-verify
-time-sensitive facts with docs/checklists/CL-07-upstream-watch.md
-before acting on them.
+refreshed 2026-07-10 (full CL-07 run, herdr v0.7.3 latest tag) and
+2026-07-23 (full CL-07 run, herdr v0.7.5 latest; native search
+RELEASED in v0.7.4 -> A1 triggered; see docs/upstream-log.md). Every
+claim cites its source. Re-verify time-sensitive facts with
+docs/checklists/CL-07-upstream-watch.md before acting on them.
 
 How to use this file: pick the highest unfinished item whose
 dependencies are done, follow its checklist (docs/checklists/), meet
@@ -21,22 +22,26 @@ Status legend: [ ] todo, [x] done, [~] partial/in progress,
 
 ## Positioning (why this plugin should exist at all)
 
-- UPDATE 2026-07-10: herdr native copy-mode search is MERGED upstream
-  (issue #1230, closing Discussion #563) but UNRELEASED (latest tag
-  v0.7.3). It is literal-only smartcase `/` `?` with `n`/`N` and
-  match highlighting - no regex, no patterns, no extract, no
-  jump/open/paste actions. The first stable release that ships it
-  starts archive trigger A1 (two-week native trial).
+- UPDATE 2026-07-23: herdr native copy-mode search is RELEASED -
+  v0.7.4 stable (2026-07-15) ships #1230 (which closed Discussion
+  #563). Archive trigger A1 is RUNNING: two-week native trial, user
+  decision due ~2026-07-29. Native search remains literal-only
+  smartcase `/` `?` with `n`/`N` and match highlighting - no regex,
+  no patterns, no extract, no jump/open/paste actions - and has an
+  open highlight bug (#1667). No upstream issue asks for
+  regex/pattern search as of 2026-07-23.
 - This plugin's surviving edge is therefore everything AROUND raw
   search: regex + smartcase, copycat-style patterns, extrakto-style
   extraction, soft-wrap-aware matching, and actions on a match (jump,
   open, paste-through). Phase 2 is re-ranked to invest only there;
   copy-mode motion parity is frozen (see the Phase 2 posture note).
-- Among 136 repos tagged `herdr-plugin` (2026-07-10), still no other
-  plugin does scrollback regex search with in-place highlighting.
-  Neighbors are visible-screen only: rmarganti/herdr-pluck and
-  hotchpotch/herdr-tiny-fingers (thumbs/fingers-style hints),
-  iurysza/termscope (open visible files/links).
+- Among 305 repos tagged `herdr-plugin` (2026-07-23; was 136 on
+  2026-07-10), still no other plugin does scrollback regex search
+  with in-place highlighting. Neighbors are visible-screen only:
+  rmarganti/herdr-pluck and hotchpotch/herdr-tiny-fingers
+  (thumbs/fingers-style hints), iurysza/termscope (open visible
+  files/links), RooseveltAdvisors/herdr-leap (EasyMotion-style
+  jump + copy).
 - The core design (keyboard-driven selection over scrollback) matches
   the single most-demanded capability in neighboring ecosystems:
   zellij "keyboard select and copy" issue #947 (88 reactions) and
@@ -339,7 +344,7 @@ disclosure section sets those expectations first.
   public but GitHub Pages is NOT enabled yet (site 404). Enable once via
   Settings -> Pages -> Source: GitHub Actions, then confirm a green run.
 
-## In-place search (no separate pane/layout) - status: BLOCKED UPSTREAM
+## In-place search (no separate pane/layout) - status: PARTIALLY UNBLOCKED (v0.7.4 popup)
 
 The wish: search like native copy mode, no overlay pane. As of herdr
 v0.7.1 the plugin docs state "No API exists for extending or
@@ -363,25 +368,38 @@ Unblock triggers (checked by CL-07):
   2026-07-10 via #1230, unreleased) -> see Archive conditions instead
 - a copy-mode extension/override API ships -> port this plugin's
   search into it (major version)
-- floating/popup plugin surfaces ship (upstream #1125, open with 9
-  reactions; the earlier #785/#812 were closed not_planned) -> the real
-  fix here: today a plugin overlay renders full-window (`--placement`
-  overlay == zoomed, verified 2026-07-07), so search cannot open inside
-  just the current pane. A pane-scoped floating surface would confine it
-  to the focused pane and drop the herdr frame without the global
-  pane_borders=false. UX win for extract too.
+- floating/popup plugin surfaces ship (upstream #1125) -> SHIPPED in
+  v0.7.4 (2026-07-15): `placement = "popup"` opens a session-modal
+  floating terminal popup with optional width/height (cells or
+  percentage), one popup per session, tiled layout untouched. Caveat:
+  it is session-modal, NOT pane-scoped - it will not anchor over the
+  focused pane the way the current overlay's frozen-screen trick does,
+  so it is not automatically "true in-place" for copy mode. NEXT (needs
+  a TTY session): characterize popup for this plugin - does herdr draw
+  a border around it (and does `[ui] pane_borders = false` still
+  matter)? does the plugin manifest `[[panes]]` accept it? where does
+  it anchor and at what default size? Verdict likely: strong fit for
+  EXTRACT (bottom-popup picker, today full-window) and possibly for a
+  compact search prompt; weaker fit for full copy mode, which wants the
+  pane's own content under the cursor. Evaluate after the A1 trial
+  decides which modes survive.
 
 ## Continuous - upstream watch
 
 Run docs/checklists/CL-07-upstream-watch.md quarterly, or before
 starting any Phase 2 item, or when herdr updates beyond a patch
 release. Log findings in docs/upstream-log.md. Last full CL-07 run:
-2026-07-10 (herdr 0.7.3 latest tag; native search merged unreleased,
-#1230 - see the log entry). The next attention point is the NEXT
-STABLE herdr release: if it ships #1230, start the A1 two-week native
-trial. Empirical facts that can silently change: the ~1000-line pane
-read cap (undocumented upstream), OSC 52 forwarding timing (the 200 ms
-exit grace), overlay placement behavior, plugin manifest schema.
+2026-07-23 (herdr v0.7.5 latest, v0.7.4 installed; native search
+RELEASED in v0.7.4 -> A1 triggered - see the log entry). Next
+attention points: (1) the A1 two-week native trial outcome, due
+~2026-07-29; (2) upgrading to v0.7.5 requires re-running `just link`
+(BREAKING #1174: plugins are now user-global, 0.7.3-era session
+installs are dropped); (3) the empirical contract re-verify is DUE
+(0.7.3 -> 0.7.4 jump, skipped 2026-07-23 for lack of a TTY session)
+plus characterizing the new popup placement. Empirical facts that can
+silently change: the ~1000-line pane read cap (undocumented upstream),
+OSC 52 forwarding timing (the 200 ms exit grace), overlay placement
+behavior, plugin manifest schema.
 
 ## Archive conditions
 
@@ -390,7 +408,7 @@ when the gap closes. Decision table - evaluate during CL-07 runs:
 
 | # | Condition | How to check | Action |
 |---|-----------|--------------|--------|
-| A1 | herdr STABLE release ships `/` `?` search in copy mode with match highlighting | herdr CHANGELOG + issue #1230 (ARMED: merged unreleased 2026-07-10; first stable tag with it starts the trial) | Try native for 2 weeks. If it covers daily use: archive. If patterns/extract still add value: strip to the surviving modes, note in README |
+| A1 | herdr STABLE release ships `/` `?` search in copy mode with match highlighting | herdr CHANGELOG + issue #1230 (TRIGGERED 2026-07-23: v0.7.4 stable, published 2026-07-15, ships it; trial window runs to ~2026-07-29) | Try native for 2 weeks. If it covers daily use: archive. If patterns/extract still add value: strip to the surviving modes, note in README. USER decision - never archive without it |
 | A2 | Copy-mode extension API ships | CL-07 step 4 sentinel: plugins docs stop saying runtime action registration / native plugin UI are outside v1, or a copy-mode extension API appears (the old "No API exists..." sentence was removed 2026-07 in a docs reorg, no API shipped) | Either port (new major) or archive in favor of a native-integrated successor |
 | A3 | Another maintained plugin reaches scrollback-search parity | awesome-herdr + `herdr-plugin` topic search | Archive, link to it from README |
 | A4 | herdr breaks the plugin contract (pane read semantics, overlay placement) and fixing costs more than the plugin is worth | CI red + CL-07 | Pin last working herdr version in README, mark maintenance-only; archive if unused |
@@ -437,6 +455,27 @@ docs/upstream-log.md):
 - competitors (all visible-screen only): rmarganti/herdr-pluck
   (unchanged), hotchpotch/herdr-tiny-fingers and iurysza/termscope
   (both new, updated 2026-07-09); `herdr-plugin` topic at 136 repos
+- OSC 133 / prompt marks: still nothing upstream (F7 stays blocked)
+
+herdr upstream refresh (2026-07-23, v0.7.5 latest, v0.7.4 installed;
+full log in docs/upstream-log.md):
+- native search RELEASED: v0.7.4 stable (2026-07-15) ships #1230
+  (literal smartcase `/` `?` `n` `N` + highlighting + cross-line
+  w/b/e); A1 trial running. Open native-search bug: #1667 (highlight
+  does not cover the full match). No upstream regex/pattern-search
+  ask exists yet.
+- popup surfaces SHIPPED: #1125 closed via v0.7.4 - plugin panes can
+  use `placement = "popup"` (session-modal float, width/height in
+  cells or percent, singleton per session); see the In-place section
+  for the pending TTY characterization.
+- v0.7.5 BREAKING #1174: plugins are user-global now (re-link after
+  upgrade); #893 registry clobber fixed 2026-07-15. New `[[startup]]`
+  plugin hooks (unneeded here). `herdr config check` flags unknown
+  keys.
+- competitors: still none doing scrollback search; new visible-only
+  neighbors RooseveltAdvisors/herdr-leap, malone-c/herdr-keybind-
+  search; `herdr-plugin` topic at 305 repos (was 136). Still not
+  listed in awesome-herdr (P0.3 open).
 - OSC 133 / prompt marks: still nothing upstream (F7 stays blocked)
 
 Cross-ecosystem demand (reaction counts as of 2026-07-07):
