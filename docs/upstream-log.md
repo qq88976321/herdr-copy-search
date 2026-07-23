@@ -10,6 +10,29 @@ Append-only log of CL-07 runs (newest first). Entry template:
     - empirical contract: <re-verified/skipped (no version change)>
     - archive table: <no trigger / trigger Ax -> action taken>
 
+## 2026-07-23 (A1 decision - keep and reposition; docs-only)
+
+Follow-up to the same-day CL-07 run entry below. The user resolved
+archive trigger A1 early, without waiting out the two-week trial:
+
+- decision: KEEP the plugin. The surviving edge is real and daily:
+  regex + smartcase incremental search whose Enter lands in the
+  plugin's own copy state at the match (no scroll) for refine/yank,
+  copycat patterns, extrakto extraction, soft-wrap-aware matching.
+  Native (v0.7.4) owns plain browsing and literal lookups - it reads
+  the full scrollback, while this plugin is capped at ~1000 lines by
+  `herdr pane read`.
+- scope: documentation repositioning ONLY. README, website, and
+  ROADMAP drop the "fill the gap until native lands, then exit"
+  narrative for a coexistence story. No behavior change; all three
+  entry points (copy/search/extract) stay; no demo re-record (CL-04
+  not triggered); no release forced.
+- deferred (possible later 0.2.0, not planned): removing the copy
+  entry point; optional --mode pattern entry point.
+- archive table: the consumed A1 row is rewritten as a forward
+  trigger - native grows regex/pattern search or extraction ->
+  re-run the keep/strip/archive decision.
+
 ## 2026-07-23 (herdr v0.7.4 installed, v0.7.5 latest; full CL-07 run)
 
 Run triggered by a user-requested roadmap re-analysis. Two stable
