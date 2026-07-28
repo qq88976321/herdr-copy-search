@@ -1,4 +1,5 @@
 use crate::ansi;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Plugin configuration from $HERDR_PLUGIN_CONFIG_DIR/config.toml.
 /// Parsed with a minimal flat-TOML extractor in the spirit of
@@ -6,16 +7,172 @@ use crate::ansi;
 /// scanning stops at the first `[table]` header. No arrays, no escapes.
 pub const DEFAULT_EXTRACT_HEIGHT: u8 = 40;
 
+/// A plugin-owned keybinding using the same `ctrl+alt+key` notation as
+/// herdr's keybindings. The plugin process receives extract-mode input
+/// directly, so these bindings live in the plugin config rather than
+/// herdr's global `[[keys.command]]` table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeyBinding {
+    pub code: KeyCode,
+    pub modifiers: KeyModifiers,
+}
+
+impl KeyBinding {
+    pub fn parse(value: &str) -> Option<Self> {
+        let parts: Vec<&str> = value.trim().split('+').collect();
+        let (key, modifier_names) = parts.split_last()?;
+        if key.is_empty() {
+            return None;
+        }
+        let modifiers = parse_modifiers(modifier_names)?;
+        Some(KeyBinding {
+            code: parse_key_code(key, modifiers)?,
+            modifiers,
+        })
+    }
+
+    pub fn matches(self, key: KeyEvent) -> bool {
+        self.code == key.code && self.modifiers == key.modifiers
+    }
+
+    pub fn label(self) -> String {
+        format!(
+            "{}{}",
+            modifier_label(self.modifiers, self.code),
+            key_code_label(self.code)
+        )
+    }
+}
+
+fn parse_modifiers(names: &[&str]) -> Option<KeyModifiers> {
+    let mut modifiers = KeyModifiers::NONE;
+    for name in names {
+        match name.to_ascii_lowercase().as_str() {
+            "ctrl" | "control" => modifiers.insert(KeyModifiers::CONTROL),
+            "alt" | "meta" => modifiers.insert(KeyModifiers::ALT),
+            "shift" => modifiers.insert(KeyModifiers::SHIFT),
+            _ => return None,
+        }
+    }
+    Some(modifiers)
+}
+
+fn parse_key_code(name: &str, modifiers: KeyModifiers) -> Option<KeyCode> {
+    let name = name.to_ascii_lowercase();
+    if let Some(code) = named_key_code(&name, modifiers) {
+        return Some(code);
+    }
+    if let Some(number) = name.strip_prefix('f') {
+        let number = number.parse::<u8>().ok()?;
+        return (1..=24).contains(&number).then_some(KeyCode::F(number));
+    }
+    let mut chars = name.chars();
+    let mut c = chars.next()?;
+    if chars.next().is_some() {
+        return None;
+    }
+    if modifiers.contains(KeyModifiers::SHIFT) {
+        c = c.to_ascii_uppercase();
+    }
+    Some(KeyCode::Char(c))
+}
+
+fn named_key_code(name: &str, modifiers: KeyModifiers) -> Option<KeyCode> {
+    Some(match name {
+        "enter" | "return" => KeyCode::Enter,
+        "tab" if modifiers.contains(KeyModifiers::SHIFT) => KeyCode::BackTab,
+        "tab" => KeyCode::Tab,
+        "backtab" => KeyCode::BackTab,
+        "esc" | "escape" => KeyCode::Esc,
+        "space" => KeyCode::Char(' '),
+        "backspace" => KeyCode::Backspace,
+        "delete" | "del" => KeyCode::Delete,
+        "insert" | "ins" => KeyCode::Insert,
+        "home" => KeyCode::Home,
+        "end" => KeyCode::End,
+        "pageup" | "page-up" | "page_up" => KeyCode::PageUp,
+        "pagedown" | "page-down" | "page_down" => KeyCode::PageDown,
+        "up" => KeyCode::Up,
+        "down" => KeyCode::Down,
+        "left" => KeyCode::Left,
+        "right" => KeyCode::Right,
+        _ => return None,
+    })
+}
+
+fn modifier_label(modifiers: KeyModifiers, code: KeyCode) -> String {
+    let mut out = String::new();
+    for (modifier, label) in [
+        (KeyModifiers::CONTROL, "Ctrl+"),
+        (KeyModifiers::ALT, "Alt+"),
+        (KeyModifiers::SHIFT, "Shift+"),
+    ] {
+        if modifiers.contains(modifier)
+            && !(modifier == KeyModifiers::SHIFT && code == KeyCode::BackTab)
+        {
+            out.push_str(label);
+        }
+    }
+    out
+}
+
+fn key_code_label(code: KeyCode) -> String {
+    match code {
+        KeyCode::Enter => "Enter".into(),
+        KeyCode::Tab => "Tab".into(),
+        KeyCode::BackTab => "Shift+Tab".into(),
+        KeyCode::Esc => "Esc".into(),
+        KeyCode::Char(' ') => "Space".into(),
+        KeyCode::Backspace => "Backspace".into(),
+        KeyCode::Delete => "Delete".into(),
+        KeyCode::Insert => "Insert".into(),
+        KeyCode::Home => "Home".into(),
+        KeyCode::End => "End".into(),
+        KeyCode::PageUp => "PgUp".into(),
+        KeyCode::PageDown => "PgDn".into(),
+        KeyCode::Up => "Up".into(),
+        KeyCode::Down => "Down".into(),
+        KeyCode::Left => "Left".into(),
+        KeyCode::Right => "Right".into(),
+        KeyCode::Char(c) => c.to_string(),
+        KeyCode::F(n) => format!("F{n}"),
+        _ => "?".into(),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ExtractBindings {
+    pub copy: KeyBinding,
+    pub insert: KeyBinding,
+}
+
+impl Default for ExtractBindings {
+    fn default() -> Self {
+        ExtractBindings {
+            copy: KeyBinding {
+                code: KeyCode::Tab,
+                modifiers: KeyModifiers::NONE,
+            },
+            insert: KeyBinding {
+                code: KeyCode::Enter,
+                modifiers: KeyModifiers::NONE,
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Config {
     /// Extract popup height as a percentage of the screen, 1-100.
     pub extract_height: u8,
+    pub extract_bindings: ExtractBindings,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Config {
             extract_height: DEFAULT_EXTRACT_HEIGHT,
+            extract_bindings: ExtractBindings::default(),
         }
     }
 }
@@ -25,8 +182,25 @@ impl Config {
         let height = toml_int_field(text, "extract_height")
             .unwrap_or(DEFAULT_EXTRACT_HEIGHT as i64)
             .clamp(1, 100) as u8;
+        let defaults = ExtractBindings::default();
+        let bindings = ExtractBindings {
+            copy: toml_str_field(text, "extract_copy_key")
+                .and_then(|value| KeyBinding::parse(&value))
+                .unwrap_or(defaults.copy),
+            insert: toml_str_field(text, "extract_insert_key")
+                .and_then(|value| KeyBinding::parse(&value))
+                .unwrap_or(defaults.insert),
+        };
+        // Ambiguous bindings would make one action unreachable. Treat the
+        // pair atomically and retain the documented defaults instead.
+        let extract_bindings = if bindings.copy == bindings.insert {
+            defaults
+        } else {
+            bindings
+        };
         Config {
             extract_height: height,
+            extract_bindings,
         }
     }
 }
@@ -282,13 +456,61 @@ mod tests {
 
     #[test]
     fn from_toml_clamps_and_defaults() {
+        let defaults = Config::default();
         assert_eq!(Config::from_toml("").extract_height, 40);
+        assert_eq!(
+            Config::from_toml("").extract_bindings,
+            defaults.extract_bindings
+        );
         assert_eq!(Config::from_toml("extract_height = 60").extract_height, 60);
         assert_eq!(Config::from_toml("extract_height = 0").extract_height, 1);
         assert_eq!(
             Config::from_toml("extract_height = 500").extract_height,
             100
         );
+    }
+
+    #[test]
+    fn keybinding_parser_uses_herdr_style_names() {
+        let enter = KeyBinding {
+            code: KeyCode::Enter,
+            modifiers: KeyModifiers::NONE,
+        };
+        assert_eq!(KeyBinding::parse("enter"), Some(enter));
+        assert_eq!(enter.label(), "Enter");
+        let shifted = KeyBinding {
+            code: KeyCode::Char('X'),
+            modifiers: KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SHIFT,
+        };
+        assert_eq!(KeyBinding::parse("ctrl+alt+shift+x"), Some(shifted));
+        assert_eq!(shifted.label(), "Ctrl+Alt+Shift+X");
+        assert_eq!(
+            KeyBinding::parse("shift+tab"),
+            Some(KeyBinding {
+                code: KeyCode::BackTab,
+                modifiers: KeyModifiers::SHIFT,
+            })
+        );
+        assert!(KeyBinding::parse("prefix+x").is_none());
+        assert!(KeyBinding::parse("not-a-key").is_none());
+    }
+
+    #[test]
+    fn extract_bindings_can_swap_copy_and_insert() {
+        let config =
+            Config::from_toml("extract_copy_key = \"enter\"\nextract_insert_key = \"tab\"\n");
+        assert_eq!(config.extract_bindings.copy.code, KeyCode::Enter);
+        assert_eq!(config.extract_bindings.insert.code, KeyCode::Tab);
+    }
+
+    #[test]
+    fn invalid_or_duplicate_extract_bindings_are_safe() {
+        let defaults = ExtractBindings::default();
+        let invalid = Config::from_toml("extract_copy_key = \"bogus-key\"\n");
+        assert_eq!(invalid.extract_bindings.copy, defaults.copy);
+        let duplicate =
+            Config::from_toml("extract_copy_key = \"enter\"\nextract_insert_key = \"enter\"\n");
+        assert_eq!(duplicate.extract_bindings, defaults);
     }
 
     #[test]

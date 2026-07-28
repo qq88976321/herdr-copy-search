@@ -1,4 +1,4 @@
-use crate::config::Theme;
+use crate::config::{ExtractBindings, Theme};
 use crate::lineedit::LineEdit;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 
@@ -124,8 +124,8 @@ pub fn popup_layout(rows: usize, pct: u8) -> (usize, usize) {
     (rows.saturating_sub(popup), popup.saturating_sub(3).max(1))
 }
 
-/// extrakto-style token picker: type to fuzzy-filter, Enter inserts
-/// into the source pane, Tab copies via OSC 52.
+/// extrakto-style token picker: type to fuzzy-filter, then use the
+/// configured action keys to insert into the source pane or copy via OSC 52.
 pub struct ExtractApp {
     pub query: LineEdit,
     pub granularity: Granularity,
@@ -147,6 +147,7 @@ pub struct ExtractApp {
     pub backdrop_off: usize,
     height_pct: u8,
     pub theme: Theme,
+    pub bindings: ExtractBindings,
     pub quit: bool,
 }
 
@@ -166,6 +167,7 @@ impl ExtractApp {
             backdrop_off: 0,
             height_pct: height_pct.clamp(1, 100),
             theme: Theme::default(),
+            bindings: ExtractBindings::default(),
             quit: false,
         };
         app.refilter();
@@ -175,6 +177,11 @@ impl ExtractApp {
     /// Replace the active color theme (ui.rs defaults + user config).
     pub fn set_theme(&mut self, theme: Theme) {
         self.theme = theme;
+    }
+
+    /// Replace the default Tab-copy / Enter-insert action bindings.
+    pub fn set_bindings(&mut self, bindings: ExtractBindings) {
+        self.bindings = bindings;
     }
 
     pub fn set_size(&mut self, cols: usize, rows: usize) {
@@ -225,6 +232,22 @@ impl ExtractApp {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ExtractEffect> {
+        if self.bindings.copy.matches(key) {
+            if let Some(text) = self.selected_text() {
+                let text = text.to_string();
+                self.quit = true;
+                return Some(ExtractEffect::Copy(text));
+            }
+            return None;
+        }
+        if self.bindings.insert.matches(key) {
+            if let Some(text) = self.selected_text() {
+                let text = text.to_string();
+                self.quit = true;
+                return Some(ExtractEffect::Insert(text));
+            }
+            return None;
+        }
         use KeyCode::*;
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
@@ -248,20 +271,6 @@ impl ExtractApp {
                 } else {
                     self.query.clear();
                     self.refilter();
-                }
-            }
-            Enter => {
-                if let Some(text) = self.selected_text() {
-                    let text = text.to_string();
-                    self.quit = true;
-                    return Some(ExtractEffect::Insert(text));
-                }
-            }
-            Tab => {
-                if let Some(text) = self.selected_text() {
-                    let text = text.to_string();
-                    self.quit = true;
-                    return Some(ExtractEffect::Copy(text));
                 }
             }
             _ => {
@@ -405,6 +414,32 @@ mod tests {
         let eff = a.handle_key(code(KeyCode::Tab));
         assert_eq!(eff, Some(ExtractEffect::Copy("beta".into())));
         assert!(a.quit);
+    }
+
+    #[test]
+    fn configured_keys_can_swap_copy_and_insert() {
+        let mut copy = ExtractApp::new("alpha\nbeta", 100, 0);
+        copy.set_bindings(ExtractBindings {
+            copy: crate::config::KeyBinding {
+                code: KeyCode::Enter,
+                modifiers: KeyModifiers::NONE,
+            },
+            insert: crate::config::KeyBinding {
+                code: KeyCode::Tab,
+                modifiers: KeyModifiers::NONE,
+            },
+        });
+        assert_eq!(
+            copy.handle_key(code(KeyCode::Enter)),
+            Some(ExtractEffect::Copy("beta".into()))
+        );
+
+        let mut insert = ExtractApp::new("alpha\nbeta", 100, 0);
+        insert.set_bindings(copy.bindings);
+        assert_eq!(
+            insert.handle_key(code(KeyCode::Tab)),
+            Some(ExtractEffect::Insert("beta".into()))
+        );
     }
 
     #[test]

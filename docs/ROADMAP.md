@@ -177,6 +177,7 @@ F2 > F6 > F11 > F3 > F12 > F13 > F14 > F15 > F16 > F17.
 | F16 | [ ] Search history + explicit literal toggle | S | tmux parity |
 | F17 | [ ] Extract config polish (min len, suffix, granularity) | S | extrakto #67 |
 | F18 | [x] Mouse gestures: drag / double-click WORD / triple-click line, OSC 52 copy on release | S/M | author req |
+| F19 | [x] Extract: configurable copy/insert action keys | S | author req |
 | R1 | [x] Panic audit: none in non-test code; TUI panic-safe | S | robustness |
 
 TTY-verified 2026-07-09 (driven in a real herdr session via `herdr pane
@@ -341,6 +342,12 @@ herdr's PTY forwarding over SSH, so the constant needs no widening.
   (extrakto #67/#97 ask for separator config), default granularity
   word vs line (extrakto #72). Done when: keys parsed + applied +
   README config table updated.
+- F19: [DONE] flat-TOML keys configure the extract copy and insert actions,
+  invalid bindings fall back individually, duplicate bindings restore the
+  original pair, and the idle hint names the effective keys. The original
+  Enter-insert/Tab-copy defaults remain for compatibility even though current
+  extrakto uses Enter-copy/Tab-insert; the maintainer should decide whether a
+  future release changes the defaults.
 - R1: audit unwrap/expect/panic in non-test code paths; each site
   either becomes an error path or gets a comment stating why it
   cannot fail. TUI must never panic mid-alt-screen (leaves the
