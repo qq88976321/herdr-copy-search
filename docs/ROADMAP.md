@@ -191,6 +191,13 @@ and the idle hint dim. F9 demos already show the styled row (re-recorded
 OSC 52 -> LOCAL clipboard leg is the one check left to the user (the
 clipboard lives on the workstation, not reachable from here).
 
+TTY-verified 2026-07-31 by the user (mouse input cannot be driven by
+`herdr pane send-keys`, so a human clicked): F18 - drag, double-click
+and triple-click each select and land in the LOCAL clipboard on release,
+the mode row reports `copied N chars`, the selection stays highlighted
+and the overlay stays open. The 400ms MULTI_CLICK_WINDOW survives
+herdr's PTY forwarding over SSH, so the constant needs no widening.
+
 - F1: every mature tool converged on user regexes in config (extrakto
   redirects all pattern requests to its config; wezterm
   quick_select_patterns; kitty hints custom regex; thumbs #44;
