@@ -252,6 +252,17 @@ impl App {
         Some(Effect::Copy(text))
     }
 
+    /// Copy path for a finished mouse gesture: reports the same "copied
+    /// N chars" as `y` but leaves the selection highlighted, the way a
+    /// GUI selection survives a copy (Esc clears it). None without a
+    /// selection, so a plain click copies nothing - unlike `yank`, there
+    /// is deliberately no match-under-cursor fallback here.
+    fn yank_keeping_selection(&mut self) -> Option<Effect> {
+        let text = self.selection_text()?;
+        self.message = Some(format!("copied {} chars", text.chars().count()));
+        Some(Effect::Copy(text))
+    }
+
     fn jump_match(&mut self, forward: bool) {
         if self.search.pattern.is_empty() {
             self.message = Some("no previous search".into());
@@ -596,14 +607,7 @@ impl App {
                 self.drag_origin = None;
                 if self.mouse_sel {
                     self.mouse_sel = false;
-                    if self.sel.is_some() {
-                        // yank(false): "copied N chars" message, selection
-                        // cleared, stay in copy mode. The sel.is_some()
-                        // guard keeps yank's fallback (copy the search
-                        // match under the cursor) from firing on a plain
-                        // click.
-                        return self.yank(false);
-                    }
+                    return self.yank_keeping_selection();
                 }
             }
             _ => {}
@@ -1109,7 +1113,11 @@ mod tests {
         let eff = a.handle_mouse(up(4, 0), t);
         assert_eq!(eff, Some(Effect::Copy("hello".into())));
         assert_eq!(a.message.as_deref(), Some("copied 5 chars"));
-        assert!(a.sel.is_none());
+        assert_eq!(
+            a.sel,
+            Some((SelKind::Char, Pos { row: 0, col: 0 })),
+            "the selection stays highlighted after a mouse copy"
+        );
         assert!(!a.quit, "mouse copy stays in copy mode");
     }
 
@@ -1126,6 +1134,12 @@ mod tests {
         a.handle_mouse(down(8, 0), t);
         let eff = a.handle_mouse(up(8, 0), t);
         assert_eq!(eff, Some(Effect::Copy("https://x.dev".into())));
+        assert_eq!(a.message.as_deref(), Some("copied 13 chars"));
+        assert_eq!(
+            a.sel,
+            Some((SelKind::Char, Pos { row: 0, col: 6 })),
+            "the word stays highlighted"
+        );
         assert!(!a.quit);
     }
 
@@ -1158,6 +1172,12 @@ mod tests {
         a.handle_mouse(down(1, 1), t);
         let eff = a.handle_mouse(up(1, 1), t);
         assert_eq!(eff, Some(Effect::Copy("abcdefghijkl\n".into())));
+        assert_eq!(a.message.as_deref(), Some("copied 13 chars"));
+        assert_eq!(
+            a.sel,
+            Some((SelKind::Line, Pos { row: 0, col: 0 })),
+            "the line stays highlighted"
+        );
     }
 
     #[test]

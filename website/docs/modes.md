@@ -28,7 +28,7 @@ mode on the match - no scrolling - to refine the selection and yank. The
 | `Enter` | copy the selection or the match under the cursor and exit; with nothing to copy, just exit |
 | `p` | pattern menu: `[u]rl [f]ile [g]it-sha [i]p [d]igits [q]uoted` |
 | `alt+u/f/g/i/d/q` | activate a pattern directly |
-| mouse | wheel scrolls; click moves; drag selects and copies on release; double-click selects the WORD under the pointer, triple-click the whole (soft-wrap joined) line - both copy on release |
+| mouse | wheel scrolls; click moves; drag selects and copies on release; double-click selects the WORD under the pointer, triple-click the whole (soft-wrap joined) line - both copy on release. A mouse copy keeps the selection highlighted (`Esc` clears it) |
 | `q`, `Esc`, `ctrl+c` | exit (Esc clears the selection or cancels the search first; ctrl+c exits from any mode) |
 
 Pattern searches run backward from the cursor like tmux-copycat: the
