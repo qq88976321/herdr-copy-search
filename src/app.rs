@@ -1,10 +1,12 @@
 use crate::buffer::{Buffer, Pos};
+use crate::click::ClickTracker;
 use crate::config::Theme;
 use crate::lineedit::LineEdit;
 use crate::motion;
 use crate::patterns::{PatternDef, Patterns};
 use crate::search::{Direction, Search};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use std::time::Instant;
 
 pub enum Mode {
     Normal,
@@ -51,6 +53,7 @@ pub struct App {
     pub quit: bool,
     want_col: usize,
     drag_origin: Option<Pos>,
+    clicks: ClickTracker,
     saved_pattern: String,
     pending: Option<Pending>,
     pending_bottom: bool,
@@ -93,6 +96,7 @@ impl App {
             quit: false,
             want_col: 0,
             drag_origin: None,
+            clicks: ClickTracker::default(),
             saved_pattern: String::new(),
             pending: None,
             pending_bottom: true,
@@ -561,16 +565,14 @@ impl App {
         self.incremental(&query, direction, origin, origin_top);
     }
 
-    pub fn handle_mouse(&mut self, ev: MouseEvent) {
+    pub fn handle_mouse(&mut self, ev: MouseEvent, now: Instant) {
         match ev.kind {
             MouseEventKind::ScrollUp => self.scroll(-3),
             MouseEventKind::ScrollDown => self.scroll(3),
             MouseEventKind::Down(MouseButton::Left) => {
+                let count = self.clicks.press(ev.column, ev.row, now);
                 if let Some(p) = self.pos_at(ev.column, ev.row) {
-                    self.sel = None;
-                    self.cursor = p;
-                    self.want_col = p.col;
-                    self.drag_origin = Some(p);
+                    self.mouse_press(p, count);
                 }
             }
             MouseEventKind::Drag(MouseButton::Left) => {
@@ -589,6 +591,36 @@ impl App {
                 self.drag_origin = None;
             }
             _ => {}
+        }
+    }
+
+    /// Left press dispatch by click count: 1 moves the cursor and arms a
+    /// drag; 2 selects the WORD under the cursor (a whitespace cell reads
+    /// as a plain click, so a lone space is never selected); 3 (and every
+    /// clamped further click) selects the whole logical line, joining
+    /// soft-wrapped rows.
+    fn mouse_press(&mut self, p: Pos, count: u8) {
+        self.cursor = p;
+        self.want_col = p.col;
+        self.sel = None;
+        self.drag_origin = None;
+        let on_word = self
+            .buf
+            .line(p.row)
+            .chars
+            .get(p.col)
+            .is_some_and(|c| !c.is_whitespace());
+        match count {
+            2 if on_word => self.apply_text_object(false, true),
+            3 => {
+                let (first, last) = self.buf.logical_span(p.row);
+                self.sel = Some((SelKind::Line, Pos { row: first, col: 0 }));
+                self.goto(Pos {
+                    row: last,
+                    col: self.buf.max_col(last),
+                });
+            }
+            _ => self.drag_origin = Some(p),
         }
     }
 
@@ -619,6 +651,23 @@ mod tests {
         let mut a = App::new(Buffer::from_text(text), false, None);
         a.set_size(80, 11); // 10 content rows + status
         a
+    }
+
+    fn mouse(kind: MouseEventKind, col: u16, row: u16) -> MouseEvent {
+        MouseEvent {
+            kind,
+            column: col,
+            row,
+            modifiers: KeyModifiers::NONE,
+        }
+    }
+
+    fn down(col: u16, row: u16) -> MouseEvent {
+        mouse(MouseEventKind::Down(MouseButton::Left), col, row)
+    }
+
+    fn up(col: u16, row: u16) -> MouseEvent {
+        mouse(MouseEventKind::Up(MouseButton::Left), col, row)
     }
 
     #[test]
@@ -963,10 +1012,56 @@ mod tests {
             row: 0,
             modifiers: KeyModifiers::NONE,
         };
-        a.handle_mouse(wheel(MouseEventKind::ScrollDown));
+        let t = Instant::now();
+        a.handle_mouse(wheel(MouseEventKind::ScrollDown), t);
         assert_eq!(a.top, 26);
-        a.handle_mouse(wheel(MouseEventKind::ScrollUp));
+        a.handle_mouse(wheel(MouseEventKind::ScrollUp), t);
         assert_eq!(a.top, 23, "scrolling up into history is free");
+    }
+
+    #[test]
+    fn double_click_selects_the_word_under_the_cursor() {
+        // WORD (whitespace-delimited), so the whole URL is one object.
+        let mut a = app("visit https://x.dev now");
+        let t = Instant::now();
+        a.handle_mouse(down(8, 0), t);
+        a.handle_mouse(up(8, 0), t);
+        a.handle_mouse(down(8, 0), t);
+        assert_eq!(a.sel, Some((SelKind::Char, Pos { row: 0, col: 6 })));
+        assert_eq!(a.cursor, Pos { row: 0, col: 18 });
+        assert_eq!(a.selection_text().as_deref(), Some("https://x.dev"));
+    }
+
+    #[test]
+    fn double_click_on_whitespace_is_a_plain_click() {
+        let mut a = app("foo bar");
+        let t = Instant::now();
+        a.handle_mouse(down(3, 0), t);
+        a.handle_mouse(up(3, 0), t);
+        a.handle_mouse(down(3, 0), t);
+        assert!(a.sel.is_none(), "no lone-space selection");
+        assert_eq!(a.cursor, Pos { row: 0, col: 3 });
+    }
+
+    #[test]
+    fn triple_click_selects_the_soft_wrapped_logical_line() {
+        // "abcdefghijkl" wrapped over three rows, then a hard line; the
+        // click lands on the MIDDLE row of the wrapped group.
+        let mut a = App::new(
+            Buffer::from_reads("abcdefghijkl\nend", "abcd\nefgh\nijkl\nend"),
+            false,
+            None,
+        );
+        a.set_size(80, 11);
+        let t = Instant::now();
+        for _ in 0..2 {
+            a.handle_mouse(down(1, 1), t);
+            a.handle_mouse(up(1, 1), t);
+        }
+        a.handle_mouse(down(1, 1), t);
+        assert_eq!(a.sel, Some((SelKind::Line, Pos { row: 0, col: 0 })));
+        assert_eq!(a.cursor, Pos { row: 2, col: 3 });
+        assert_eq!(a.selection_text().as_deref(), Some("abcdefghijkl\n"));
     }
 
     #[test]

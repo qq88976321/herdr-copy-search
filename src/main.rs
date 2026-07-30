@@ -10,6 +10,7 @@ use herdr_copy_search::{osc52, ui};
 use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::time::Instant;
 
 const USAGE: &str = "usage: herdr-copy-search [--mode copy|search|extract] [--pane ID] [--lines N] [--height PCT] [--input FILE]";
 
@@ -153,7 +154,7 @@ fn run(app: &mut App) -> io::Result<bool> {
                     }
                 }
             }
-            Event::Mouse(m) => app.handle_mouse(m),
+            Event::Mouse(m) => app.handle_mouse(m, Instant::now()),
             Event::Resize(w, h) => app.set_size(w as usize, h as usize),
             _ => {}
         }
