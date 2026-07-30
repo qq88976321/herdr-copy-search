@@ -54,6 +54,9 @@ pub struct App {
     want_col: usize,
     drag_origin: Option<Pos>,
     clicks: ClickTracker,
+    /// The current selection came from a mouse gesture, so releasing the
+    /// left button copies it.
+    mouse_sel: bool,
     saved_pattern: String,
     pending: Option<Pending>,
     pending_bottom: bool,
@@ -97,6 +100,7 @@ impl App {
             want_col: 0,
             drag_origin: None,
             clicks: ClickTracker::default(),
+            mouse_sel: false,
             saved_pattern: String::new(),
             pending: None,
             pending_bottom: true,
@@ -565,7 +569,7 @@ impl App {
         self.incremental(&query, direction, origin, origin_top);
     }
 
-    pub fn handle_mouse(&mut self, ev: MouseEvent, now: Instant) {
+    pub fn handle_mouse(&mut self, ev: MouseEvent, now: Instant) -> Option<Effect> {
         match ev.kind {
             MouseEventKind::ScrollUp => self.scroll(-3),
             MouseEventKind::ScrollDown => self.scroll(3),
@@ -580,6 +584,7 @@ impl App {
                     if self.sel.is_none() {
                         self.sel = Some((SelKind::Char, origin));
                     }
+                    self.mouse_sel = true;
                     if let Some(p) = self.pos_at(ev.column, ev.row) {
                         self.cursor = p;
                         self.want_col = p.col;
@@ -589,9 +594,21 @@ impl App {
             }
             MouseEventKind::Up(MouseButton::Left) => {
                 self.drag_origin = None;
+                if self.mouse_sel {
+                    self.mouse_sel = false;
+                    if self.sel.is_some() {
+                        // yank(false): "copied N chars" message, selection
+                        // cleared, stay in copy mode. The sel.is_some()
+                        // guard keeps yank's fallback (copy the search
+                        // match under the cursor) from firing on a plain
+                        // click.
+                        return self.yank(false);
+                    }
+                }
             }
             _ => {}
         }
+        None
     }
 
     /// Left press dispatch by click count: 1 moves the cursor and arms a
@@ -603,6 +620,7 @@ impl App {
         self.cursor = p;
         self.want_col = p.col;
         self.sel = None;
+        self.mouse_sel = false;
         self.drag_origin = None;
         let on_word = self
             .buf
@@ -611,7 +629,10 @@ impl App {
             .get(p.col)
             .is_some_and(|c| !c.is_whitespace());
         match count {
-            2 if on_word => self.apply_text_object(false, true),
+            2 if on_word => {
+                self.apply_text_object(false, true);
+                self.mouse_sel = true;
+            }
             3 => {
                 let (first, last) = self.buf.logical_span(p.row);
                 self.sel = Some((SelKind::Line, Pos { row: first, col: 0 }));
@@ -619,6 +640,7 @@ impl App {
                     row: last,
                     col: self.buf.max_col(last),
                 });
+                self.mouse_sel = true;
             }
             _ => self.drag_origin = Some(p),
         }
@@ -664,6 +686,10 @@ mod tests {
 
     fn down(col: u16, row: u16) -> MouseEvent {
         mouse(MouseEventKind::Down(MouseButton::Left), col, row)
+    }
+
+    fn drag_to(col: u16, row: u16) -> MouseEvent {
+        mouse(MouseEventKind::Drag(MouseButton::Left), col, row)
     }
 
     fn up(col: u16, row: u16) -> MouseEvent {
@@ -1062,6 +1088,94 @@ mod tests {
         assert_eq!(a.sel, Some((SelKind::Line, Pos { row: 0, col: 0 })));
         assert_eq!(a.cursor, Pos { row: 2, col: 3 });
         assert_eq!(a.selection_text().as_deref(), Some("abcdefghijkl\n"));
+    }
+
+    #[test]
+    fn mouse_click_release_copies_nothing() {
+        let mut a = app("hello world");
+        let t = Instant::now();
+        assert_eq!(a.handle_mouse(down(6, 0), t), None);
+        assert_eq!(a.cursor, Pos { row: 0, col: 6 });
+        assert_eq!(a.handle_mouse(up(6, 0), t), None);
+        assert!(a.sel.is_none());
+    }
+
+    #[test]
+    fn mouse_drag_release_copies_the_selection() {
+        let mut a = app("hello world");
+        let t = Instant::now();
+        a.handle_mouse(down(0, 0), t);
+        a.handle_mouse(drag_to(4, 0), t);
+        let eff = a.handle_mouse(up(4, 0), t);
+        assert_eq!(eff, Some(Effect::Copy("hello".into())));
+        assert_eq!(a.message.as_deref(), Some("copied 5 chars"));
+        assert!(a.sel.is_none());
+        assert!(!a.quit, "mouse copy stays in copy mode");
+    }
+
+    #[test]
+    fn double_click_release_copies_the_word() {
+        let mut a = app("visit https://x.dev now");
+        let t = Instant::now();
+        a.handle_mouse(down(8, 0), t);
+        assert_eq!(
+            a.handle_mouse(up(8, 0), t),
+            None,
+            "first release is a click"
+        );
+        a.handle_mouse(down(8, 0), t);
+        let eff = a.handle_mouse(up(8, 0), t);
+        assert_eq!(eff, Some(Effect::Copy("https://x.dev".into())));
+        assert!(!a.quit);
+    }
+
+    #[test]
+    fn double_click_on_whitespace_release_copies_nothing() {
+        let mut a = app("foo bar");
+        let t = Instant::now();
+        a.handle_mouse(down(3, 0), t);
+        a.handle_mouse(up(3, 0), t);
+        a.handle_mouse(down(3, 0), t);
+        // No selection and, crucially, no fallback copy of a search match:
+        // the mouse_sel guard keeps yank()'s match-under-cursor branch off.
+        assert_eq!(a.handle_mouse(up(3, 0), t), None);
+        assert!(a.sel.is_none());
+    }
+
+    #[test]
+    fn triple_click_release_copies_the_logical_line() {
+        let mut a = App::new(
+            Buffer::from_reads("abcdefghijkl\nend", "abcd\nefgh\nijkl\nend"),
+            false,
+            None,
+        );
+        a.set_size(80, 11);
+        let t = Instant::now();
+        for _ in 0..2 {
+            a.handle_mouse(down(1, 1), t);
+            a.handle_mouse(up(1, 1), t);
+        }
+        a.handle_mouse(down(1, 1), t);
+        let eff = a.handle_mouse(up(1, 1), t);
+        assert_eq!(eff, Some(Effect::Copy("abcdefghijkl\n".into())));
+    }
+
+    #[test]
+    fn fourth_click_repeats_the_line_copy() {
+        let mut a = app("one line");
+        let t = Instant::now();
+        for _ in 0..3 {
+            a.handle_mouse(down(2, 0), t);
+            a.handle_mouse(up(2, 0), t);
+        }
+        // The count clamps at 3: the 4th click re-selects the line ...
+        a.handle_mouse(down(2, 0), t);
+        assert_eq!(a.sel, Some((SelKind::Line, Pos { row: 0, col: 0 })));
+        // ... and its release re-copies it.
+        assert_eq!(
+            a.handle_mouse(up(2, 0), t),
+            Some(Effect::Copy("one line\n".into()))
+        );
     }
 
     #[test]

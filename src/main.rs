@@ -128,6 +128,27 @@ fn screen_rows(buf: &Buffer, visible: &str) -> Option<usize> {
     Some(n)
 }
 
+/// Write `text` to the clipboard via OSC 52, surfacing the >100KB
+/// truncation warning and failures in the mode row. Returns whether the
+/// write reached the terminal so the caller can hold the pane open for
+/// the forwarding grace. Shared by the keyboard and mouse copy paths.
+fn emit_copy(app: &mut App, text: &str) -> bool {
+    match osc52::emit(text) {
+        Ok(false) => true,
+        Ok(true) => {
+            app.message = Some(format!(
+                "copied {} chars (large; terminal may truncate)",
+                text.chars().count()
+            ));
+            true
+        }
+        Err(e) => {
+            app.message = Some(format!("copy failed: {e}"));
+            false
+        }
+    }
+}
+
 /// Run the interactive loop; returns whether anything was copied so the
 /// caller can hold the pane open for the OSC 52 forwarding grace.
 fn run(app: &mut App) -> io::Result<bool> {
@@ -141,20 +162,14 @@ fn run(app: &mut App) -> io::Result<bool> {
         match event::read()? {
             Event::Key(k) if k.kind != KeyEventKind::Release => {
                 if let Some(Effect::Copy(text)) = app.handle_key(k) {
-                    match osc52::emit(&text) {
-                        Ok(false) => copied = true,
-                        Ok(true) => {
-                            copied = true;
-                            app.message = Some(format!(
-                                "copied {} chars (large; terminal may truncate)",
-                                text.chars().count()
-                            ));
-                        }
-                        Err(e) => app.message = Some(format!("copy failed: {e}")),
-                    }
+                    copied |= emit_copy(app, &text);
                 }
             }
-            Event::Mouse(m) => app.handle_mouse(m, Instant::now()),
+            Event::Mouse(m) => {
+                if let Some(Effect::Copy(text)) = app.handle_mouse(m, Instant::now()) {
+                    copied |= emit_copy(app, &text);
+                }
+            }
             Event::Resize(w, h) => app.set_size(w as usize, h as usize),
             _ => {}
         }
