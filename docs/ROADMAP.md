@@ -176,6 +176,7 @@ F2 > F6 > F11 > F3 > F12 > F13 > F14 > F15 > F16 > F17.
 | F15 | [ ] Seed search/extract query from pane selection | S/M | extrakto #114 |
 | F16 | [ ] Search history + explicit literal toggle | S | tmux parity |
 | F17 | [ ] Extract config polish (min len, suffix, granularity) | S | extrakto #67 |
+| F18 | [x] Mouse gestures: drag / double-click WORD / triple-click line, OSC 52 copy on release | S/M | author req |
 | R1 | [x] Panic audit: none in non-test code; TUI panic-safe | S | robustness |
 
 TTY-verified 2026-07-09 (driven in a real herdr session via `herdr pane

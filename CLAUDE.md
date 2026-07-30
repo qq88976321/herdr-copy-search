@@ -65,6 +65,7 @@ just release   # cargo-release: gate, bump, sync manifest, regenerate
               --height), terminal setup, event loop
 - app.rs      application state machine (App, Mode, Effect)
 - buffer.rs   line buffer, display-width positions (Pos)
+- click.rs    multi-click press tracker (single/double/triple counting)
 - ansi.rs     ANSI escape sequence parser
 - motion.rs   vim-style motions (w b e, paragraphs, g G ...)
 - search.rs   incremental regex search (invalid regex -> literal)
