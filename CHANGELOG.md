@@ -4,6 +4,36 @@ All notable changes to this project are documented in this file.
 The format is based on Keep a Changelog, and this project adheres to
 Conventional Commits.
 
+## [0.1.5] - 2026-08-04
+
+### Features
+
+- **click**: Multi-click tracker
+- **app**: Mouse double/triple click selection
+- **app**: Auto-copy on mouse selection release
+- **app**: Keep the selection highlighted after a mouse copy
+
+### Documentation
+
+- **readme**: Embed demo GIFs inline so they play on github.com
+- **upstream**: Watch run 2026-07-10
+- **roadmap**: Re-rank phase 2 for differentiation after upstream #1230
+- **upstream**: Watch run 2026-07-23
+- **roadmap**: Record A1 trigger and popup unblock from v0.7.4/v0.7.5
+- **roadmap**: Record A1 outcome - keep the plugin, reposition docs
+- **readme**: Reposition around coexistence with native search
+- **site**: Mirror the coexistence repositioning on the website
+- Mouse gestures in README/site/roadmap
+- **roadmap**: Record the F18 mouse TTY verification
+
+### Build System
+
+- **demo**: Derive README GIFs from mp4 via just gifs
+
+### Miscellaneous
+
+- **meta**: Reword descriptions for the coexistence repositioning
+
 ## [0.1.4] - 2026-07-09
 
 ### Features
