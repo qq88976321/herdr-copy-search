@@ -26,6 +26,7 @@ mode on the match - no scrolling - to refine the selection and yank. The
 | `iw aw iW aW` | select the word / WORD text object under the cursor (works after `v` or on its own) |
 | `y` | copy selection, or the match under the cursor |
 | `Enter` | copy the selection or the match under the cursor and exit; with nothing to copy, just exit |
+| `Insert` (configurable) | copy, exit, and insert the text into the source pane (`herdr pane send-text`); no trailing newline, so nothing is submitted for you |
 | `p` | pattern menu: `[u]rl [f]ile [g]it-sha [i]p [d]igits [q]uoted` |
 | `alt+u/f/g/i/d/q` | activate a pattern directly |
 | mouse | wheel scrolls; click moves; drag selects and copies on release; double-click selects the WORD under the pointer, triple-click the whole (soft-wrap joined) line - both copy on release. A mouse copy keeps the selection highlighted (`Esc` clears it) |
@@ -51,6 +52,18 @@ pattern_u = ""             # disable the built-in url pattern
 Values are taken verbatim between the quotes (no TOML escape processing).
 An invalid regex falls back to a literal search, matching the
 incremental-search behavior.
+
+`Insert` copies the text, exits, and inserts it into the source pane, so a
+selection can go straight back to the shell without a separate paste.
+Nothing is submitted: no trailing newline is sent, leaving the text on the
+command line to edit. Rebind it with herdr's normal `ctrl+alt+key` notation;
+an invalid value keeps the default, and the configured key takes precedence
+over that key's usual meaning:
+
+```toml
+# $HERDR_PLUGIN_CONFIG_DIR/config.toml
+copy_insert_key = "insert"
+```
 
 ### Colors
 
@@ -80,13 +93,21 @@ are listed newest first and filtered with a built-in fuzzy matcher. Like
 (default 40%); the pane content stays visible above it in its original
 colors.
 
-Popup height: pass `--height PCT` in the pane command, or set it in the
-plugin config file (path from `herdr plugin config-dir copy-search`):
+Popup height and action keys can be set in the plugin config file (path
+from `herdr plugin config-dir copy-search`). Key values use herdr's normal
+`ctrl+alt+key` notation; invalid or duplicate action keys retain the default
+pair. Configured action keys take precedence over query editing keys:
 
 ```toml
 # $HERDR_PLUGIN_CONFIG_DIR/config.toml
 extract_height = 40
+extract_copy_key = "tab"
+extract_insert_key = "enter"
 ```
+
+Pass `--height PCT` in the pane command to override `extract_height`. To
+match extrakto's defaults (Enter copies and Tab inserts), swap those two
+values.
 
 | Keys | Action |
 | --- | --- |
@@ -94,8 +115,8 @@ extract_height = 40
 | `Left/Right`, `Home/End`, `Delete` | edit the query, readline-style: `ctrl+a/e` line ends, `ctrl+b/f` char, `ctrl+left/right` word, `ctrl+w` delete word, `ctrl+k` kill to end, `ctrl+d` delete |
 | `Up`/`Down`, `ctrl+p/n` | move the selection |
 | `PgUp/PgDn`, wheel over the backdrop | scroll the pane output above the popup (wheel over the list moves the selection) |
-| `Enter` | insert the pick into the source pane (`herdr pane send-text`) |
-| `Tab` | copy the pick via OSC 52 |
+| `Enter` (configurable) | insert the pick into the source pane (`herdr pane send-text`) |
+| `Tab` (configurable) | copy the pick via OSC 52 |
 | `ctrl+t` | toggle word / line granularity |
 | `ctrl+u` | clear the query |
 | `Esc` | clear the query, then exit |
@@ -114,5 +135,7 @@ badge_line_bg       = "green"
 extract_selected_bg = "white"
 ```
 
-Extract mode follows extrakto's convention (Enter inserts, Tab copies);
+Extract mode preserves this plugin's original defaults (Enter inserts, Tab
+copies) for compatibility. extrakto itself defaults to the reverse: Enter
+copies and Tab inserts. Both action keys are configurable in plugin config;
 copy mode follows tmux (Enter copies and exits).

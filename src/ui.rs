@@ -1,7 +1,7 @@
 use crate::ansi;
 use crate::app::{App, Mode, SelKind};
 use crate::buffer::{Buffer, Pos};
-use crate::config::{ColorPair, Theme};
+use crate::config::{ColorPair, ExtractBindings, Theme};
 use crate::extract::{ExtractApp, Granularity};
 use crate::lineedit::LineEdit;
 use crate::search::Direction;
@@ -195,15 +195,22 @@ pub fn mode_hint(app: &App) -> Option<String> {
         return None;
     }
     Some(if app.sel.is_some() {
-        "y copy  Enter copy+exit  Esc clear".to_string()
+        format!(
+            "y copy  Enter copy+exit  {} copy+insert  Esc clear",
+            app.insert_key.label()
+        )
     } else {
         "/ search  n/N next  v select  p patterns  y copy  q quit".to_string()
     })
 }
 
 /// Keybind hint for the extract popup, shown dim on the separator row.
-pub fn extract_hint() -> &'static str {
-    "Tab copy  Enter insert  ^t word/line  Esc cancel"
+pub fn extract_hint(bindings: ExtractBindings) -> String {
+    format!(
+        "{} copy  {} insert  ^t word/line  Esc cancel",
+        bindings.copy.label(),
+        bindings.insert.label()
+    )
 }
 
 /// A full-width box-drawing rule. Used both as the divider between the
@@ -512,7 +519,7 @@ pub fn draw_extract(out: &mut impl Write, app: &ExtractApp, backdrop: &Buffer) -
         MoveTo(0, hint_row as u16),
         Clear(ClearType::CurrentLine),
         SetAttribute(Attribute::Dim),
-        crossterm::style::Print(truncate_to_width(extract_hint().to_string(), app.view_cols)),
+        crossterm::style::Print(truncate_to_width(extract_hint(app.bindings), app.view_cols)),
         SetAttribute(Attribute::Reset),
         MoveTo(0, (hint_row + 1) as u16),
         Clear(ClearType::CurrentLine),
@@ -859,9 +866,19 @@ mod tests {
     }
 
     #[test]
-    fn extract_hint_names_core_keys() {
-        let h = extract_hint();
-        for k in ["copy", "insert", "word/line", "Esc"] {
+    fn extract_hint_names_configured_keys_and_actions() {
+        let bindings = ExtractBindings {
+            copy: crate::config::KeyBinding {
+                code: KeyCode::Enter,
+                modifiers: KeyModifiers::NONE,
+            },
+            insert: crate::config::KeyBinding {
+                code: KeyCode::Tab,
+                modifiers: KeyModifiers::NONE,
+            },
+        };
+        let h = extract_hint(bindings);
+        for k in ["Enter copy", "Tab insert", "word/line", "Esc"] {
             assert!(h.contains(k), "extract hint mentions {k}: {h}");
         }
     }

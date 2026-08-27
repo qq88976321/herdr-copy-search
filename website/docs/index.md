@@ -27,7 +27,8 @@ coexistence positioning and the exit conditions live in the
   `[u]rl [f]ile [g]it-sha [i]p [d]igits [q]uoted`, running backward from
   the cursor; committing a search lands in copy mode on the match.
 - **extract** - an extrakto-style fuzzy picker over the same scrollback,
-  newest first, in a bottom popup; `Tab` copies, `Enter` inserts.
+  newest first, in a bottom popup; `Tab` copies and `Enter` inserts by
+  default, with both action keys configurable.
 - **copy** - the landing state for search and patterns, also openable
   directly: vim-style motions, `v`/`V` selection, `y` or `Enter` to copy.
 
