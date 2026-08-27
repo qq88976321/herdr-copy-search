@@ -1,7 +1,7 @@
 use crossterm::event::{self, Event, KeyEventKind};
 use herdr_copy_search::app::{App, Effect};
 use herdr_copy_search::buffer::Buffer;
-use herdr_copy_search::config::Theme;
+use herdr_copy_search::config::{Config, Theme};
 use herdr_copy_search::extract::{ExtractApp, ExtractEffect};
 use herdr_copy_search::herdr::{self, Herdr};
 use herdr_copy_search::nested;
@@ -208,12 +208,13 @@ fn run_extract(app: &mut ExtractApp, backdrop: &Buffer) -> io::Result<Option<Ext
 
 fn extract_mode(
     buf: &Buffer,
-    height: u8,
+    config: Config,
     source_pane: Option<&str>,
     theme: Theme,
 ) -> io::Result<()> {
-    let mut app = ExtractApp::new(&buf.text(), height, buf.lines.len());
+    let mut app = ExtractApp::new(&buf.text(), config.extract_height, buf.lines.len());
     app.set_theme(theme);
+    app.set_bindings(config.extract_bindings);
     match run_extract(&mut app, buf)? {
         Some(ExtractEffect::Copy(text)) => {
             if osc52::emit(&text)? {
@@ -277,12 +278,13 @@ fn main() -> ExitCode {
         }
     };
     let cfg_text = herdr_copy_search::config::read_config_text(|k| std::env::var(k).ok());
-    let height = cli
-        .height
-        .unwrap_or_else(|| herdr_copy_search::config::Config::from_toml(&cfg_text).extract_height);
+    let mut config = Config::from_toml(&cfg_text);
+    if let Some(height) = cli.height {
+        config.extract_height = height;
+    }
     let theme = Theme::from_toml(&cfg_text);
     let result = match cli.mode {
-        RunMode::Extract => extract_mode(&buf, height, source_pane.as_deref(), theme),
+        RunMode::Extract => extract_mode(&buf, config, source_pane.as_deref(), theme),
         RunMode::Copy => copy_mode(
             buf,
             false,

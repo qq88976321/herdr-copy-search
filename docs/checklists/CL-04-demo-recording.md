@@ -22,8 +22,9 @@ Prerequisites:
   image pull hits ghcr.io and docker.sock is a unix socket.
 - herdr on PATH (`command -v herdr`). The demo shows whatever version the
   host has.
-- a CJK font on the host: `fc-list :lang=zh` (this host has Noto Sans CJK
-  at /usr/share/fonts/opentype/noto).
+- a CJK font on the host: `fc-match -f '%{file}' 'Noto Sans CJK TC'`
+  must return an existing font file. Derive its directory with `dirname`
+  rather than hard-coding a distro-specific font path.
 
 Steps:
 1. [ ] `cargo build --release` on the host. The plugin binary is dynamic
@@ -31,14 +32,17 @@ Steps:
        the mounted checkout (HERDR_PLUGIN_ROOT), no cargo in the image.
 2. [ ] Render each tape. `--user` keeps output owned by you; `-e HOME=/tmp`
        + `XDG_RUNTIME_DIR` give herdr/fontconfig writable homes; the herdr
-       mount supplies the binary; the noto mount + `fc-cache` let chromium
-       fall back to CJK glyphs:
+       mount supplies the binary; the discovered Noto mount + `fc-cache` let
+       chromium fall back to CJK glyphs:
        ```
+       font_file=$(fc-match -f '%{file}' 'Noto Sans CJK TC')
+       font_dir=$(dirname "$font_file")
+       test -f "$font_file"
        docker run --rm --user "$(id -u):$(id -g)" \
          -e HOME=/tmp -e XDG_RUNTIME_DIR=/tmp/run \
          -v "$PWD":/vhs \
          -v "$(command -v herdr)":/usr/local/bin/herdr:ro \
-         -v /usr/share/fonts/opentype/noto:/usr/share/fonts/noto-cjk:ro \
+         -v "$font_dir":/usr/share/fonts/noto-cjk:ro \
          --entrypoint sh ghcr.io/charmbracelet/vhs \
          -c 'fc-cache -f >/dev/null 2>&1; vhs demo/extract.tape'
        ```

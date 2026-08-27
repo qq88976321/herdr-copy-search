@@ -18,7 +18,7 @@ Set TypingSpeed 100ms
 # rates drop frames and the clip plays too fast (playback stays 25fps).
 Set Framerate 12
 # Play back 20% slower for readability.
-Set PlaybackSpeed 0.8
+Set PlaybackSpeed 1.0
 
 Hide
 # Seed a throwaway herdr config, start the server, link this checkout.
