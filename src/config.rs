@@ -7,6 +7,9 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 /// scanning stops at the first `[table]` header. No arrays, no escapes.
 pub const DEFAULT_EXTRACT_HEIGHT: u8 = 40;
 
+/// Copy mode's insert key: copy, exit, and send the text to the pane.
+pub const DEFAULT_COPY_INSERT_KEY: KeyCode = KeyCode::Insert;
+
 /// A plugin-owned keybinding using the same `ctrl+alt+key` notation as
 /// herdr's keybindings. The plugin process receives extract-mode input
 /// directly, so these bindings live in the plugin config rather than
@@ -18,6 +21,14 @@ pub struct KeyBinding {
 }
 
 impl KeyBinding {
+    /// Copy mode's default insert key.
+    pub fn default_copy_insert() -> Self {
+        KeyBinding {
+            code: DEFAULT_COPY_INSERT_KEY,
+            modifiers: KeyModifiers::NONE,
+        }
+    }
+
     pub fn parse(value: &str) -> Option<Self> {
         let parts: Vec<&str> = value.trim().split('+').collect();
         let (key, modifier_names) = parts.split_last()?;
@@ -166,6 +177,8 @@ pub struct Config {
     /// Extract popup height as a percentage of the screen, 1-100.
     pub extract_height: u8,
     pub extract_bindings: ExtractBindings,
+    /// Copy mode: copy the selection, exit, and insert it into the pane.
+    pub copy_insert_key: KeyBinding,
 }
 
 impl Default for Config {
@@ -173,6 +186,7 @@ impl Default for Config {
         Config {
             extract_height: DEFAULT_EXTRACT_HEIGHT,
             extract_bindings: ExtractBindings::default(),
+            copy_insert_key: KeyBinding::default_copy_insert(),
         }
     }
 }
@@ -198,9 +212,13 @@ impl Config {
         } else {
             bindings
         };
+        let copy_insert_key = toml_str_field(text, "copy_insert_key")
+            .and_then(|value| KeyBinding::parse(&value))
+            .unwrap_or_else(KeyBinding::default_copy_insert);
         Config {
             extract_height: height,
             extract_bindings,
+            copy_insert_key,
         }
     }
 }
@@ -511,6 +529,26 @@ mod tests {
         let duplicate =
             Config::from_toml("extract_copy_key = \"enter\"\nextract_insert_key = \"enter\"\n");
         assert_eq!(duplicate.extract_bindings, defaults);
+    }
+
+    #[test]
+    fn copy_insert_key_defaults_to_insert() {
+        let config = Config::from_toml("");
+        assert_eq!(config.copy_insert_key.code, KeyCode::Insert);
+        assert_eq!(config.copy_insert_key.modifiers, KeyModifiers::NONE);
+    }
+
+    #[test]
+    fn copy_insert_key_is_configurable() {
+        let config = Config::from_toml("copy_insert_key = \"ctrl+y\"\n");
+        assert_eq!(config.copy_insert_key.code, KeyCode::Char('y'));
+        assert_eq!(config.copy_insert_key.modifiers, KeyModifiers::CONTROL);
+    }
+
+    #[test]
+    fn invalid_copy_insert_key_falls_back_to_the_default() {
+        let config = Config::from_toml("copy_insert_key = \"bogus-key\"\n");
+        assert_eq!(config.copy_insert_key, KeyBinding::default_copy_insert());
     }
 
     #[test]

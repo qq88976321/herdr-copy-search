@@ -171,7 +171,7 @@ F2 > F6 > F11 > F3 > F12 > F13 > F14 > F15 > F16 > F17.
 | F10 | [ ] Overlay reflow: rewrap logical lines to the overlay width | L | future/UX |
 | F11 | [ ] Pattern capture-group copy (yank only group 1) | S | copycat #64 |
 | F12 | [ ] Copy joins soft-wraps + optional trailing-space trim | S/M | tmux #4995 |
-| F13 | [ ] Paste-through: send selection/match to source pane | S | extrakto #91 |
+| F13 | [x] Paste-through: send selection/match to source pane | S | extrakto #91 |
 | F14 | [ ] More built-in patterns (uuid, ipv6, hex color, ...) | S | thumbs/fingers |
 | F15 | [ ] Seed search/extract query from pane selection | S/M | extrakto #114 |
 | F16 | [ ] Search history + explicit literal toggle | S | tmux parity |
@@ -309,13 +309,14 @@ herdr's PTY forwarding over SSH, so the constant needs no widening.
   `v` and linewise `V` selections over a wrapped row may not. Done
   when: a wrapped URL copies as one line, pad spaces are not copied
   (or a config key controls trimming), tests.
-- F13: a key sends the current selection/match INTO the source pane
-  instead of the clipboard ("copy and paste immediately": extrakto
-  #91/#101, fingers `:paste:`, thumbs upcase). The extract insert
-  path (`herdr pane send-text`, main.rs) already does this; extend
-  it to copy/search mode. Decide the key in the CL-06 brainstorm.
-  Done when: paste-through works from copy mode, README key table
-  updated.
+- F13: [DONE] Insert (configurable via `copy_insert_key`) copies the
+  selection or match, exits, and sends the text to the source pane over
+  the existing extract insert path (`herdr pane send-text`, main.rs).
+  It copies to the clipboard as well rather than instead: the effect
+  reuses the OSC 52 emit, so one key both copies and pastes. No trailing
+  newline is sent, so a pasted command is left on the command line to
+  edit rather than run. The binding is checked before the literal key
+  table, so a rebound key shadows its usual meaning.
 - F14: extend patterns.rs with the classes thumbs/fingers ship that
   we lack: uuid, ipv6, hex color, 0x hex number, docker image ref,
   markdown-link URL (thumbs/fingers READMEs; copycat #57 is a

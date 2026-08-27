@@ -1,6 +1,6 @@
 use crate::buffer::{Buffer, Pos};
 use crate::click::ClickTracker;
-use crate::config::Theme;
+use crate::config::{KeyBinding, Theme};
 use crate::lineedit::LineEdit;
 use crate::motion;
 use crate::patterns::{PatternDef, Patterns};
@@ -35,6 +35,8 @@ enum Pending {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Effect {
     Copy(String),
+    /// Copy the text, exit, and insert it into the source pane.
+    Insert(String),
 }
 
 pub struct App {
@@ -48,6 +50,7 @@ pub struct App {
     pub patterns: Patterns,
     pub theme: Theme,
     pub mode: Mode,
+    pub insert_key: KeyBinding,
     pub sel: Option<(SelKind, Pos)>,
     pub message: Option<String>,
     pub quit: bool,
@@ -94,6 +97,7 @@ impl App {
             patterns: Patterns::default(),
             theme: Theme::default(),
             mode,
+            insert_key: KeyBinding::default_copy_insert(),
             sel: None,
             message: None,
             quit: false,
@@ -116,6 +120,11 @@ impl App {
     /// Replace the active color theme (ui.rs defaults + user config).
     pub fn set_theme(&mut self, theme: Theme) {
         self.theme = theme;
+    }
+
+    /// Replace the copy-mode insert key (config override).
+    pub fn set_insert_key(&mut self, key: KeyBinding) {
+        self.insert_key = key;
     }
 
     /// Called by the UI before each draw with the terminal size.
@@ -237,12 +246,17 @@ impl App {
         }
     }
 
-    fn yank(&mut self, exit: bool) -> Option<Effect> {
-        let text = self.selection_text().or_else(|| {
+    /// Text under the selection, else the search match under the cursor.
+    fn yank_text(&self) -> Option<String> {
+        self.selection_text().or_else(|| {
             self.search
                 .match_at(self.cursor)
                 .map(|m| self.buf.slice_inclusive(m.start, m.end))
-        })?;
+        })
+    }
+
+    fn yank(&mut self, exit: bool) -> Option<Effect> {
+        let text = self.yank_text()?;
         if exit {
             self.quit = true;
         } else {
@@ -261,6 +275,14 @@ impl App {
         let text = self.selection_text()?;
         self.message = Some(format!("copied {} chars", text.chars().count()));
         Some(Effect::Copy(text))
+    }
+
+    /// Copy the text, exit, and hand it to the caller to insert into the
+    /// source pane. With nothing to copy this is a plain exit, matching
+    /// Enter: an insert key that did nothing would be a confusing no-op.
+    fn yank_insert(&mut self) -> Option<Effect> {
+        self.quit = true;
+        Some(Effect::Insert(self.yank_text()?))
     }
 
     fn jump_match(&mut self, forward: bool) {
@@ -384,6 +406,11 @@ impl App {
                 }
                 return None;
             }
+        }
+        // Configured before the literal arms below so a rebound insert
+        // key takes precedence over that key's default meaning.
+        if self.insert_key.matches(key) {
+            return self.yank_insert();
         }
         match key.code {
             Char('i') if !ctrl => self.pending = Some(Pending::TextObject { around: false }),
@@ -732,6 +759,76 @@ mod tests {
         assert_eq!(a.cursor.row, 2);
         a.handle_key(key('n'));
         assert_eq!(a.cursor.row, 0);
+    }
+
+    fn insert_key() -> KeyEvent {
+        KeyEvent::new(KeyCode::Insert, KeyModifiers::NONE)
+    }
+
+    #[test]
+    fn insert_copies_selection_and_exits() {
+        let mut a = app("hello world");
+        a.handle_key(key('g'));
+        a.handle_key(key('v'));
+        for _ in 0..4 {
+            a.handle_key(key('l'));
+        }
+        let eff = a.handle_key(insert_key());
+        assert_eq!(eff, Some(Effect::Insert("hello".into())));
+        assert!(a.quit, "insert exits copy mode");
+    }
+
+    #[test]
+    fn insert_takes_the_match_under_the_cursor() {
+        let mut a = app("foo\nbar\nbaz");
+        a.handle_key(key('/'));
+        a.handle_key(key('b'));
+        a.handle_key(key('a'));
+        a.handle_key(key('r'));
+        a.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        let eff = a.handle_key(insert_key());
+        assert_eq!(eff, Some(Effect::Insert("bar".into())));
+        assert!(a.quit);
+    }
+
+    #[test]
+    fn insert_with_nothing_to_copy_just_exits() {
+        let mut a = app("hello world");
+        let eff = a.handle_key(insert_key());
+        assert_eq!(eff, None, "no selection and no match yields no effect");
+        assert!(a.quit, "insert still exits, like Enter");
+    }
+
+    #[test]
+    fn insert_key_is_rebindable() {
+        let mut a = app("hello world");
+        a.set_insert_key(KeyBinding::parse("ctrl+y").expect("parses"));
+        a.handle_key(key('g'));
+        a.handle_key(key('v'));
+        for _ in 0..4 {
+            a.handle_key(key('l'));
+        }
+        assert_eq!(
+            a.handle_key(insert_key()),
+            None,
+            "the default key no longer inserts once rebound"
+        );
+        let eff = a.handle_key(ctrl('y'));
+        assert_eq!(eff, Some(Effect::Insert("hello".into())));
+    }
+
+    #[test]
+    fn rebound_insert_key_wins_over_its_default_meaning() {
+        let mut a = app("hello world");
+        a.set_insert_key(KeyBinding::parse("y").expect("parses"));
+        a.handle_key(key('g'));
+        a.handle_key(key('v'));
+        for _ in 0..4 {
+            a.handle_key(key('l'));
+        }
+        let eff = a.handle_key(key('y'));
+        assert_eq!(eff, Some(Effect::Insert("hello".into())));
+        assert!(a.quit, "the insert binding shadows plain yank");
     }
 
     #[test]

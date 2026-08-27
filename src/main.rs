@@ -1,7 +1,7 @@
 use crossterm::event::{self, Event, KeyEventKind};
 use herdr_copy_search::app::{App, Effect};
 use herdr_copy_search::buffer::Buffer;
-use herdr_copy_search::config::{Config, Theme};
+use herdr_copy_search::config::{Config, KeyBinding, Theme};
 use herdr_copy_search::extract::{ExtractApp, ExtractEffect};
 use herdr_copy_search::herdr::{self, Herdr};
 use herdr_copy_search::nested;
@@ -149,19 +149,31 @@ fn emit_copy(app: &mut App, text: &str) -> bool {
     }
 }
 
-/// Run the interactive loop; returns whether anything was copied so the
-/// caller can hold the pane open for the OSC 52 forwarding grace.
-fn run(app: &mut App) -> io::Result<bool> {
+/// Run the interactive loop. Returns whether anything was copied (so the
+/// caller can hold the pane open for the OSC 52 forwarding grace) and any
+/// text to insert into the source pane once the terminal is restored.
+fn run(app: &mut App) -> io::Result<(bool, Option<String>)> {
     let _guard = ui::TerminalGuard::enter()?;
     let mut out = io::BufWriter::new(io::stdout());
     let (w, h) = crossterm::terminal::size()?;
     app.set_size(w as usize, h as usize);
     let mut copied = false;
+    let mut insert = None;
     ui::draw(&mut out, app)?;
     while !app.quit {
         match event::read()? {
             Event::Key(k) if k.kind != KeyEventKind::Release => {
-                if let Some(Effect::Copy(text)) = app.handle_key(k) {
+                // Insert copies as well, so both effects share the OSC 52
+                // path and only the pane hand-off is conditional.
+                let yanked = match app.handle_key(k) {
+                    Some(Effect::Copy(text)) => Some(text),
+                    Some(Effect::Insert(text)) => {
+                        insert = Some(text.clone());
+                        Some(text)
+                    }
+                    None => None,
+                };
+                if let Some(text) = yanked {
                     copied |= emit_copy(app, &text);
                 }
             }
@@ -177,7 +189,7 @@ fn run(app: &mut App) -> io::Result<bool> {
             ui::draw(&mut out, app)?;
         }
     }
-    Ok(copied)
+    Ok((copied, insert))
 }
 
 /// Extract loop; the resulting effect runs after the terminal is
@@ -238,12 +250,22 @@ fn copy_mode(
     screen_rows: Option<usize>,
     patterns: Patterns,
     theme: Theme,
+    insert_key: KeyBinding,
+    source_pane: Option<&str>,
 ) -> io::Result<()> {
     let mut app = App::new(buf, start_search, screen_rows);
     app.set_patterns(patterns);
     app.set_theme(theme);
-    if run(&mut app)? {
+    app.set_insert_key(insert_key);
+    let (copied, insert) = run(&mut app)?;
+    if copied {
         std::thread::sleep(osc52::FORWARD_GRACE);
+    }
+    // After the terminal is restored, so errors stay visible and
+    // send-text reaches a live pane (as extract mode does).
+    if let Some(text) = insert {
+        let pane = source_pane.ok_or_else(|| io::Error::other("no source pane to insert into"))?;
+        Herdr::from_env().send_text(pane, &text)?;
     }
     Ok(())
 }
@@ -283,6 +305,8 @@ fn main() -> ExitCode {
         config.extract_height = height;
     }
     let theme = Theme::from_toml(&cfg_text);
+    // Read before `config` moves into extract_mode.
+    let insert_key = config.copy_insert_key;
     let result = match cli.mode {
         RunMode::Extract => extract_mode(&buf, config, source_pane.as_deref(), theme),
         RunMode::Copy => copy_mode(
@@ -291,6 +315,8 @@ fn main() -> ExitCode {
             screen_rows,
             Patterns::from_config(&cfg_text),
             theme,
+            insert_key,
+            source_pane.as_deref(),
         ),
         RunMode::Search => copy_mode(
             buf,
@@ -298,6 +324,8 @@ fn main() -> ExitCode {
             screen_rows,
             Patterns::from_config(&cfg_text),
             theme,
+            insert_key,
+            source_pane.as_deref(),
         ),
     };
     match result {

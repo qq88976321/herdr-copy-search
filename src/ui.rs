@@ -195,7 +195,10 @@ pub fn mode_hint(app: &App) -> Option<String> {
         return None;
     }
     Some(if app.sel.is_some() {
-        "y copy  Enter copy+exit  Esc clear".to_string()
+        format!(
+            "y copy  Enter copy+exit  {} copy+insert  Esc clear",
+            app.insert_key.label()
+        )
     } else {
         "/ search  n/N next  v select  p patterns  y copy  q quit".to_string()
     })
