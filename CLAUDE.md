@@ -77,35 +77,43 @@ just release   # cargo-release: gate, bump, sync manifest, regenerate
 - config.rs   flat-TOML plugin config parser
 - ui.rs       rendering
 
-## herdr plugin contract (empirically verified, herdr 0.7.x)
+## herdr plugin contract (empirically verified; min_herdr_version 0.9.0)
 
-These facts are NOT in the official herdr docs; they were verified
-against herdr 0.7.1 on 2026-07-06/07 and partially re-checked on
-0.9.3 on 2026-10-29 (docs/upstream-log.md). Trust them over
-intuition.
+These facts are NOT in the official herdr docs. Most were verified on
+herdr 0.7.1 (2026-07-06/07) and re-checked on 0.9.3 (2026-10-29,
+docs/upstream-log.md); the manifest requires 0.9.0+ since 2026-10-29.
+Trust them over intuition.
 
 - `herdr pane read` is capped server-side at ~1000 lines (999 for
   recent-unwrapped) regardless of --lines; content is the newest tail.
-  Still 999 rows on 0.9.3; each read returns in ~10 ms, so the three
-  startup reads are not the startup cost. On 0.7.x
-  `recent-unwrapped --format ansi` returned empty once the scrollback
-  grew; 0.9.x returns content, but the plugin still reads
-  `recent --format ansi` because the display needs wrapped rows.
+  Still 999 rows on 0.9.3. A read normally returns in ~10 ms.
+- NEVER read the scrollback sources (`recent`, `recent-unwrapped`)
+  with `--format text` on a pane that may host a TUI agent: on an IDLE
+  Claude Code pane herdr pages through the alternate screen to collect
+  history (#2387, #2426), 0.5-1.1 s per read, and still returns only
+  the 38 screen rows. `--format ansi` skips that path (~10 ms) and
+  `visible --format text` is unaffected. Measured 2026-10-29 on 0.9.3
+  across three idle Claude Code panes; this was the "1 s to open in
+  Claude Code" delay. herdr.rs therefore reads everything styled, in
+  parallel, and buffer.rs strips SGR locally.
+- `recent-unwrapped --format ansi` returns content on 0.9.x (0.7.x
+  returned empty once the scrollback grew); on a 7300-line pane it
+  matched the text read line for line after stripping SGR.
 - `herdr pane read --source visible --format text` returns screen
   rows with trailing blank rows trimmed; interior blanks are kept.
-- The two reads disagree on trailing whitespace: `recent-unwrapped
-  --format text` (logical lines) trims each line's trailing spaces,
-  but `recent --format ansi` (wrapped rows) keeps them (e.g. a shell
-  prompt's `> ` cell). Verified on herdr 0.7.3, 2026-07-08. Soft-wrap
+- The two reads can disagree on trailing whitespace: the unwrapped
+  text read trimmed each line's trailing spaces, but `recent --format
+  ansi` (wrapped rows) keeps them (e.g. a shell prompt's `> ` cell).
+  Verified on herdr 0.7.3, 2026-07-08 with the text read. Soft-wrap
   alignment (buffer.rs mark_soft_wraps) must compare trailing-trimmed
   text or a single padded row makes alignment fail and drops every
   soft_wrap flag - which silently disables wrapped-word joining for
   motions/selection/search on the live pane path.
-- On 0.7.x `[[panes]].command` argv[0] resolves via PATH only;
-  relative paths fail even though the process cwd is the plugin root.
+- `[[panes]].command` argv[0]: 0.7.x resolved it via PATH only and
   herdr >= 0.8.0 resolves relative commands from the plugin root
-  (#1949). The `sh -c 'exec "$HERDR_PLUGIN_ROOT/..."'` wrapper in
-  herdr-plugin.toml stays while min_herdr_version is 0.7.0.
+  (#1949, changelog only, not TTY-verified here). The `sh -c 'exec
+  "$HERDR_PLUGIN_ROOT/..."'` wrapper in herdr-plugin.toml is kept as
+  the verified form; it costs about 1 ms.
 - Inside a plugin pane, HERDR_PANE_ID is the overlay pane itself; the
   source pane is `focused_pane_id` in HERDR_PLUGIN_CONTEXT_JSON. For
   `[[keys.command]]` bindings herdr sets HERDR_ACTIVE_PANE_ID to the
@@ -118,7 +126,8 @@ intuition.
   placement=overlay. A plugin overlay renders FULL-WINDOW, not confined
   to the focused pane's rect: `--placement overlay` and `zoomed` look
   identical (TTY-verified 2026-07-07). No pane-scoped floating overlay
-  exists in 0.7.1; `split`/`tab` open a separate pane/tab instead. The
+  exists as of 0.9.3 (the popup placement since 0.7.4 is session-modal);
+  `split`/`tab` open a separate pane/tab instead. The
   opening view is anchored to the source pane's visible screen so it
   still LOOKS in-place.
 - Pane borders (verified on 0.7.x): `[ui] pane_borders` (default

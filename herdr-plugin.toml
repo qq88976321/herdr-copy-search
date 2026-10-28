@@ -1,15 +1,16 @@
 id = "copy-search"
 name = "Copy Search"
 version = "0.1.5"
-min_herdr_version = "0.7.0"
+min_herdr_version = "0.9.0"
 description = "regex and copycat pattern search with extrakto token extraction for pane scrollback, landing in a tmux-style copy mode, copying via OSC 52"
 platforms = ["linux", "macos"]
 
 [[build]]
 command = ["cargo", "build", "--release", "--locked"]
 
-# herdr resolves pane commands via PATH, not the working directory, so
-# the built binary is addressed through HERDR_PLUGIN_ROOT.
+# The built binary is addressed through HERDR_PLUGIN_ROOT: verified on
+# every herdr the plugin has run on, independent of how pane commands
+# resolve relative paths.
 
 [[panes]]
 id = "copy"

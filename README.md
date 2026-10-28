@@ -34,6 +34,7 @@ go unanswered. Expect tmux-like behavior, not tmux-grade maturity.
 
 ```sh
 herdr plugin install qq88976321/herdr-copy-search   # from a git host
+# needs herdr 0.9.0 or newer (manifest min_herdr_version)
 # or for local development:
 herdr plugin link /path/to/herdr-copy-search
 cargo build --release --locked                   # link does not run build steps
@@ -79,10 +80,10 @@ pane_borders = false
 in `~/.config/herdr/config.toml` (then `herdr server reload-config`) to
 drop the frame herdr draws around the overlay. It is a global setting
 that also removes split-pane dividers, so it suits one-pane-per-tab
-layouts best. herdr v0.7.x has no pane-scoped floating surface yet, so
-the overlay always covers the whole window (`--placement overlay` and
-`zoomed` render the same); confining it to a single pane awaits upstream
-floating surfaces.
+layouts best. herdr has no pane-scoped floating surface yet (the popup
+placement since v0.7.4 is session-modal), so the overlay always covers
+the whole window (`--placement overlay` and `zoomed` render the same);
+confining it to a single pane awaits upstream floating surfaces.
 
 ## Search / copy mode
 
@@ -236,10 +237,12 @@ both regenerate after any UI change.
   left by a dead process is reaped on the next check.
 - Colors: buffer rows come from `pane read --source recent --format
   ansi` (styled, wrapped at the pane width) so the overlay looks like
-  the frozen pane; a second `recent-unwrapped --format text` read
+  the frozen pane; a second `recent-unwrapped --format ansi` read
   aligns them into soft-wrap flags so yanks rejoin wrapped long lines.
-  (`recent-unwrapped --format ansi` returns empty on herdr 0.7.1 once
-  scrollback grows, hence the two-read composition.) The soft-wrap
+  (Both reads ask for ansi on purpose: a `--format text` read of the
+  scrollback on an idle Claude Code pane makes herdr page through the
+  alternate screen for about a second; ansi reads skip that.) The
+  three startup reads run concurrently. The soft-wrap
   flags make navigation, word selection (iw/aw), search, and copy
   treat a word wrapped across two display rows as one unit; a word or
   URL split at the wrap is one motion target, one text object, and one
