@@ -80,10 +80,17 @@ just release   # cargo-release: gate, bump, sync manifest, regenerate
 ## herdr plugin contract (empirically verified, herdr 0.7.x)
 
 These facts are NOT in the official herdr docs; they were verified
-against herdr 0.7.1 on 2026-07-06/07. Trust them over intuition.
+against herdr 0.7.1 on 2026-07-06/07 and partially re-checked on
+0.9.3 on 2026-10-29 (docs/upstream-log.md). Trust them over
+intuition.
 
 - `herdr pane read` is capped server-side at ~1000 lines (999 for
   recent-unwrapped) regardless of --lines; content is the newest tail.
+  Still 999 rows on 0.9.3; each read returns in ~10 ms, so the three
+  startup reads are not the startup cost. On 0.7.x
+  `recent-unwrapped --format ansi` returned empty once the scrollback
+  grew; 0.9.x returns content, but the plugin still reads
+  `recent --format ansi` because the display needs wrapped rows.
 - `herdr pane read --source visible --format text` returns screen
   rows with trailing blank rows trimmed; interior blanks are kept.
 - The two reads disagree on trailing whitespace: `recent-unwrapped
@@ -94,9 +101,11 @@ against herdr 0.7.1 on 2026-07-06/07. Trust them over intuition.
   text or a single padded row makes alignment fail and drops every
   soft_wrap flag - which silently disables wrapped-word joining for
   motions/selection/search on the live pane path.
-- `[[panes]].command` argv[0] resolves via PATH only; relative paths
-  fail even though the process cwd is the plugin root. Wrap with
-  `sh -c 'exec "$HERDR_PLUGIN_ROOT/..."'` (see herdr-plugin.toml).
+- On 0.7.x `[[panes]].command` argv[0] resolves via PATH only;
+  relative paths fail even though the process cwd is the plugin root.
+  herdr >= 0.8.0 resolves relative commands from the plugin root
+  (#1949). The `sh -c 'exec "$HERDR_PLUGIN_ROOT/..."'` wrapper in
+  herdr-plugin.toml stays while min_herdr_version is 0.7.0.
 - Inside a plugin pane, HERDR_PANE_ID is the overlay pane itself; the
   source pane is `focused_pane_id` in HERDR_PLUGIN_CONTEXT_JSON. For
   `[[keys.command]]` bindings herdr sets HERDR_ACTIVE_PANE_ID to the
@@ -112,12 +121,15 @@ against herdr 0.7.1 on 2026-07-06/07. Trust them over intuition.
   exists in 0.7.1; `split`/`tab` open a separate pane/tab instead. The
   opening view is anchored to the source pane's visible screen so it
   still LOOKS in-place.
-- Pane borders are one global boolean: `[ui] pane_borders` (default
+- Pane borders (verified on 0.7.x): `[ui] pane_borders` (default
   true) draws split-pane dividers AND the frame around the plugin
   overlay; `false` removes both (no thin-line or overlay-only middle
   ground; `[theme] accent` only colors the border when on). A
   borderless in-place look needs pane_borders=false, which best suits
-  one-pane-per-tab layouts.
+  one-pane-per-tab layouts. herdr >= 0.9.0 also accepts
+  "always"/"auto"/"off" (booleans still work) and 0.8.2 added
+  `ui.pane_outer_borders`; whether `false` still removes the overlay
+  frame on 0.9.x is unverified (needs a TTY).
 - `herdr pane send-keys` rejects pageup/pagedown names; send raw
   sequences via `send-text "$(printf '\033[5~')"` (5=PgUp, 6=PgDn).
   Two esc keys sent back-to-back may be parsed as one.

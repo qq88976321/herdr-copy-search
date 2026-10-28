@@ -45,8 +45,9 @@ impl Herdr {
     }
 
     /// Recent scrollback as SGR-styled rows wrapped at the pane width.
-    /// (recent-unwrapped + ansi is unreliable server-side: it returns
-    /// empty once the scrollback grows, so styled reads use `recent`.)
+    /// (herdr 0.7.x returned empty for recent-unwrapped + ansi once the
+    /// scrollback grew, hence `recent`; 0.9.x serves both, but wrapped
+    /// rows are what the display needs anyway.)
     pub fn pane_read_ansi(&self, pane: &str, lines: usize) -> io::Result<String> {
         self.read(pane, lines, "recent", "ansi")
     }
