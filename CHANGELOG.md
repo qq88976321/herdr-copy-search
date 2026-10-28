@@ -4,7 +4,22 @@ All notable changes to this project are documented in this file.
 The format is based on Keep a Changelog, and this project adheres to
 Conventional Commits.
 
-## [0.1.5] - 2026-08-04
+## [0.2.0] - 2026-10-29
+
+### Performance
+
+- **herdr**: Read pane snapshots styled and concurrently
+
+### Documentation
+
+- **upstream**: Watch run 2026-10-29
+- **contract**: Record herdr 0.8/0.9 changes to verified facts
+
+### Miscellaneous
+
+- **manifest**: Require herdr 0.9.0
+
+## [0.1.5] - 2026-08-02
 
 ### Features
 
