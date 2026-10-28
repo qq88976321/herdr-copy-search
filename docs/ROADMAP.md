@@ -443,11 +443,12 @@ banner naming the reason and the replacement, tag a final release.
 ## Evidence appendix
 
 herdr upstream (verified 2026-07-07, herdr v0.7.1):
-- repo: https://github.com/ogulcancelik/herdr (13.2k stars, created
+- repo: https://github.com/herdrdev/herdr (was ogulcancelik/herdr
+  until v0.8.0; 13.2k stars at the time, created
   2026-03, stable releases every 1-2 weeks + near-daily previews)
 - native copy mode: issue #231 (shipped); no native search: no `/`
   `?` in config docs key tables, no search subcommand in CLI ref
-- search demand: https://github.com/ogulcancelik/herdr/discussions/563
+- search demand: https://github.com/herdrdev/herdr/discussions/563
   (open, unanswered, no maintainer commitment, no upstream ROADMAP)
 - no copy-mode plugin API: https://herdr.dev/docs/plugins/ ("No API
   exists for extending or overriding copy mode in v1")
@@ -463,7 +464,7 @@ herdr upstream (verified 2026-07-07, herdr v0.7.1):
 herdr upstream refresh (2026-07-10, v0.7.3 latest tag; full log in
 docs/upstream-log.md):
 - native search MERGED, unreleased:
-  https://github.com/ogulcancelik/herdr/issues/1230 (literal
+  https://github.com/herdrdev/herdr/issues/1230 (literal
   smartcase `/` `?` `n` `N` + highlighting + cross-line w/b/e;
   Discussion #563 closed into it; #1263 word-motion follow-up closed
   same day)

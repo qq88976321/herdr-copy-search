@@ -10,16 +10,16 @@ visible.
 
 1. [ ] Installed vs latest herdr:
        `herdr --version`
-       `curl -s https://api.github.com/repos/ogulcancelik/herdr/releases/latest | grep tag_name`
+       `curl -s https://api.github.com/repos/herdrdev/herdr/releases/latest | grep tag_name`
 2. [ ] Changelog scan since the last logged version:
-       https://github.com/ogulcancelik/herdr/blob/main/CHANGELOG.md
+       https://github.com/herdrdev/herdr/blob/master/CHANGELOG.md
        Search for: "copy mode", "search", "plugin", "pane read",
        "clipboard", "OSC". Note anything relevant.
 3. [ ] Native search release status. History: Discussion #563 was
        folded into issue #1230, which merged literal smartcase
        `/` `?` `n` `N` search + match highlighting to master on
        2026-07-10 (UNRELEASED at that date).
-       https://github.com/ogulcancelik/herdr/issues/1230
+       https://github.com/herdrdev/herdr/issues/1230
        Check whether a STABLE release now includes it; the first one
        that does STARTS the A1 two-week native trial (roadmap
        archive table).

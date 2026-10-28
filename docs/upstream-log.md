@@ -10,6 +10,67 @@ Append-only log of CL-07 runs (newest first). Entry template:
     - empirical contract: <re-verified/skipped (no version change)>
     - archive table: <no trigger / trigger Ax -> action taken>
 
+## 2026-10-29 (herdr v0.9.3 installed, v0.9.5 latest; full CL-07 run)
+
+First run since 2026-07-23. Seven stable releases in between:
+v0.8.0, v0.8.2, v0.9.0 .. v0.9.5. The upstream repo moved to
+herdrdev/herdr in v0.8.0 (old URLs redirect; raw links on `main`
+404, the default branch is `master`).
+
+- changelog: NO breaking change touches this plugin. The only
+  breaking items are the pane graphics API removal (v0.9.2), the
+  `--no-session` mode removal and live-only event subscriptions
+  (v0.9.0), and a Windows input flag (v0.9.4); none are used here.
+  `pane read`, `pane send-text`, manifest overlay panes and actions
+  are untouched; min_herdr_version 0.7.0 stays correct.
+  Behavior changes worth knowing: v0.8.0 #1949 relative plugin
+  commands now resolve from the plugin root (the sh -c wrapper is
+  only needed for 0.7.x); v0.9.0 #3444 `recent` and
+  `recent-unwrapped` reads no longer return empty on fresh panes;
+  v0.9.0 #3234 `ui.pane_borders` accepts "always"/"auto"/"off"
+  (booleans still work) and v0.8.2 adds `ui.pane_outer_borders`;
+  v0.8.2 `pane read` accepts options before the pane id; v0.8.0
+  #1717 read responses report `truncated: true` (JSON only); v0.9.4
+  adds `herdr plugin update` for GitHub installs (linked plugins
+  untouched). Native copy mode: B/E/W big-word motions (v0.8.2),
+  stays active while output continues (v0.9.1 #3841, v0.9.2 #3812);
+  still no regex, pattern, or extraction.
+  Performance: every relevant item is an upstream improvement -
+  v0.8.2 pane read latency (#2387/#2426) and typing no longer
+  waiting behind hidden-tab render cadence (#2890); v0.9.0
+  per-client TUI (#3487) and lower idle scrollback memory with
+  reads unchanged (#3556); v0.9.2 far less server CPU with many
+  panes (#4506 and siblings); v0.9.4 faster typing. Nothing for the
+  plugin to adapt.
+- discussion #563: closed (into #1230, released in v0.7.4).
+- copy-mode API sentence: PRESENT ("Runtime action registration and
+  native non-terminal plugin UI are not part of plugin v1").
+- competitors: no scrollback-search parity. Two new neighbours:
+  codingfragments/herdr-zextract (extrakto-style scrollback token
+  picker with custom regex patterns; 0 stars, created 2026-08-17,
+  pushed 2026-10-17) overlaps the extract mode;
+  youguanxinqing/herdr-flash (flash.nvim-style search/select/yank,
+  VISIBLE text only; 6 stars, pushed 2026-09-16).
+- tracked issues: #680 closed not_planned (but v0.9.1/v0.9.2 keep
+  copy mode alive during output anyway); #1667 closed not_planned;
+  #970 and #1000 still open; #1125, #893, #1174 closed completed
+  (already logged 2026-07-23).
+- empirical contract: partially re-verified on 0.9.3 (read-only,
+  pane with ~7300 lines of scrollback): `recent-unwrapped text
+  --lines 3000` = 794 logical lines in 13 ms; `recent ansi` = 999
+  rows in 9 ms (cap unchanged); `recent-unwrapped ansi` = 794 lines
+  / 124 KB, i.e. NO LONGER empty on a large scrollback (the herdr.rs
+  comment was stale; the plugin keeps reading `recent` for rows).
+  `herdr plugin list` shows copy-search enabled and linked without
+  re-linking. NOT verified (need a TTY): OSC 52 200 ms grace (step
+  8), overlay frame with pane_borders=false under 0.9.x (step 9),
+  mouse gestures after the v0.9.0/v0.9.1 host selection rework.
+- archive table: no trigger. A1 forward trigger not met (no native
+  regex/pattern/extraction); A2 sentinel present; A3 none (zextract
+  is extraction only, flash is visible-only); A4 no contract break.
+- follow-up: upgrade to v0.9.5, then run steps 8-9 and a mouse
+  gesture check in a TTY.
+
 ## 2026-07-23 (A1 decision - keep and reposition; docs-only)
 
 Follow-up to the same-day CL-07 run entry below. The user resolved
