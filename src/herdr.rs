@@ -1,10 +1,22 @@
 use std::io;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Child, Command, Stdio};
 
 /// Thin wrapper over the herdr CLI, which is the plugin API surface.
 pub struct Herdr {
     bin: PathBuf,
+}
+
+/// The three snapshots of a source pane that a session starts from.
+pub struct PaneReads {
+    /// Logical lines, SGR-styled (`recent-unwrapped --format ansi`).
+    pub unwrapped_ansi: String,
+    /// Rows wrapped at the pane width, SGR-styled (`recent --format
+    /// ansi`); empty when that read failed.
+    pub wrapped_ansi: String,
+    /// The current screen as plain rows (`visible --format text`, the
+    /// server trims trailing blank rows); empty when that read failed.
+    pub visible: String,
 }
 
 impl Herdr {
@@ -15,8 +27,14 @@ impl Herdr {
         Herdr { bin }
     }
 
-    fn read(&self, pane: &str, lines: usize, source: &str, format: &str) -> io::Result<String> {
-        let out = Command::new(&self.bin)
+    fn spawn_read(
+        &self,
+        pane: &str,
+        lines: usize,
+        source: &str,
+        format: &str,
+    ) -> io::Result<Child> {
+        Command::new(&self.bin)
             .args([
                 "pane",
                 "read",
@@ -28,7 +46,14 @@ impl Herdr {
                 "--format",
                 format,
             ])
-            .output()?;
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+    }
+
+    fn finish_read(child: Child, pane: &str) -> io::Result<String> {
+        let out = child.wait_with_output()?;
         if !out.status.success() {
             return Err(io::Error::other(format!(
                 "herdr pane read {pane} failed: {}",
@@ -38,24 +63,33 @@ impl Herdr {
         String::from_utf8(out.stdout).map_err(io::Error::other)
     }
 
-    /// Unwrapped recent scrollback as plain text (logical lines). The
-    /// herdr server caps this at ~1000 lines regardless of `lines`.
-    pub fn pane_read(&self, pane: &str, lines: usize) -> io::Result<String> {
-        self.read(pane, lines, "recent-unwrapped", "text")
-    }
-
-    /// Recent scrollback as SGR-styled rows wrapped at the pane width.
-    /// (herdr 0.7.x returned empty for recent-unwrapped + ansi once the
-    /// scrollback grew, hence `recent`; 0.9.x serves both, but wrapped
-    /// rows are what the display needs anyway.)
-    pub fn pane_read_ansi(&self, pane: &str, lines: usize) -> io::Result<String> {
-        self.read(pane, lines, "recent", "ansi")
-    }
-
-    /// The pane's current screen as plain text rows (wrapped at the
-    /// pane width; the server trims trailing blank rows).
-    pub fn pane_read_visible(&self, pane: &str, lines: usize) -> io::Result<String> {
-        self.read(pane, lines, "visible", "text")
+    /// Issue the three reads at once and collect them together, so the
+    /// startup cost is the slowest read rather than their sum. The herdr
+    /// server caps each at ~1000 lines regardless of `lines`. Only the
+    /// unwrapped read is required; the other two degrade to empty.
+    ///
+    /// The scrollback sources are read as `ansi` even where only text is
+    /// needed: a `text` read of `recent`/`recent-unwrapped` on an idle
+    /// TUI-agent pane (Claude Code and friends) makes herdr page through
+    /// the alternate screen to collect history, which takes 0.5-1.1 s and
+    /// returns nothing beyond the screen (herdr #2387, #2426). `ansi`
+    /// skips that and stripping SGR locally is free.
+    pub fn read_pane(&self, pane: &str, lines: usize) -> io::Result<PaneReads> {
+        let unwrapped = self.spawn_read(pane, lines, "recent-unwrapped", "ansi")?;
+        let wrapped = self.spawn_read(pane, lines, "recent", "ansi");
+        let visible = self.spawn_read(pane, lines, "visible", "text");
+        let unwrapped_ansi = Self::finish_read(unwrapped, pane)?;
+        let wrapped_ansi = wrapped
+            .and_then(|child| Self::finish_read(child, pane))
+            .unwrap_or_default();
+        let visible = visible
+            .and_then(|child| Self::finish_read(child, pane))
+            .unwrap_or_default();
+        Ok(PaneReads {
+            unwrapped_ansi,
+            wrapped_ansi,
+            visible,
+        })
     }
 
     /// Type `text` into a pane, as if entered at its terminal.

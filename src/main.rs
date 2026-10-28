@@ -79,24 +79,21 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Cli, String> {
 
 /// Input order: explicit file, then a herdr source pane, then piped
 /// stdin (dev use; crossterm reads events from /dev/tty instead).
-/// The herdr path reads three times: logical text for search/yank/
-/// tokens, styled wrapped rows for display (composed by
-/// Buffer::from_reads), and the visible screen so the opening view
+/// The herdr path issues three concurrent reads: styled logical lines
+/// for search/yank/tokens, styled wrapped rows for display (composed
+/// by Buffer::from_reads), and the visible screen so the opening view
 /// can keep the pane content in place (None outside herdr).
 fn acquire_buffer(cli: &Cli, source_pane: Option<&str>) -> io::Result<(Buffer, Option<usize>)> {
     if let Some(path) = &cli.input {
         return Ok((Buffer::from_ansi(&std::fs::read_to_string(path)?), None));
     }
     if let Some(pane) = source_pane {
-        let herdr = Herdr::from_env();
-        let unwrapped = herdr.pane_read(pane, cli.lines)?;
-        let wrapped_ansi = herdr.pane_read_ansi(pane, cli.lines).unwrap_or_default();
-        if wrapped_ansi.trim().is_empty() {
-            return Ok((Buffer::from_text(&unwrapped), None));
+        let reads = Herdr::from_env().read_pane(pane, cli.lines)?;
+        if reads.wrapped_ansi.trim().is_empty() {
+            return Ok((Buffer::from_ansi(&reads.unwrapped_ansi), None));
         }
-        let buf = Buffer::from_reads(&unwrapped, &wrapped_ansi);
-        let visible = herdr.pane_read_visible(pane, cli.lines).unwrap_or_default();
-        let rows = screen_rows(&buf, &visible);
+        let buf = Buffer::from_reads(&reads.unwrapped_ansi, &reads.wrapped_ansi);
+        let rows = screen_rows(&buf, &reads.visible);
         return Ok((buf, rows));
     }
     let stdin = io::stdin();

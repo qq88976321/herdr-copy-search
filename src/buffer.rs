@@ -110,19 +110,24 @@ impl Buffer {
         )
     }
 
-    /// Compose a styled buffer from herdr's two reliable pane reads:
+    /// Compose a styled buffer from herdr's two scrollback reads:
     /// `wrapped_ansi` (recent, --format ansi: styled rows wrapped at the
-    /// pane width) and `unwrapped` (recent-unwrapped, --format text:
-    /// logical lines). Rows are the wrapped ones, so the view matches
-    /// the frozen pane; the unwrapped text aligns them to mark
-    /// soft_wrap flags so yanks rejoin wrapped long lines. On any
-    /// alignment mismatch the flags safely degrade to hard breaks.
+    /// pane width) and `unwrapped` (recent-unwrapped: logical lines,
+    /// styled or plain; SGR is stripped here). Rows are the wrapped
+    /// ones, so the view matches the frozen pane; the unwrapped text
+    /// aligns them to mark soft_wrap flags so yanks rejoin wrapped long
+    /// lines. On any alignment mismatch the flags safely degrade to hard
+    /// breaks.
     pub fn from_reads(unwrapped: &str, wrapped_ansi: &str) -> Self {
         let mut lines: Vec<Line> = ansi::parse(wrapped_ansi)
             .into_iter()
             .map(Line::from_styled)
             .collect();
-        if !mark_soft_wraps(&mut lines, unwrapped) {
+        let logical: Vec<Vec<char>> = ansi::parse(unwrapped)
+            .into_iter()
+            .map(|l| trimmed_end(l.chars))
+            .collect();
+        if !mark_soft_wraps(&mut lines, &logical) {
             for line in &mut lines {
                 line.soft_wrap = false;
             }
@@ -258,16 +263,13 @@ impl Buffer {
 /// false when the texts do not line up (e.g. the pane changed between
 /// the two reads).
 ///
-/// Comparison ignores trailing whitespace: the recent-unwrapped read
-/// trims it while the wrapped ansi read keeps it (e.g. a shell prompt's
-/// trailing space), so strict equality would spuriously fail on one row
-/// and drop every soft-wrap flag. Only a group's bottom row can carry
-/// trailing whitespace; interior soft-wrapped rows are full width.
-fn mark_soft_wraps(lines: &mut [Line], unwrapped: &str) -> bool {
-    let logical: Vec<Vec<char>> = unwrapped
-        .lines()
-        .map(|l| l.trim_end().chars().collect())
-        .collect();
+/// Comparison ignores trailing whitespace: the two reads disagree on
+/// whether a row keeps it (e.g. a shell prompt's trailing space), so
+/// strict equality would spuriously fail on one row and drop every
+/// soft-wrap flag. `logical` lines arrive already trimmed; only a
+/// group's bottom row can carry trailing whitespace since interior
+/// soft-wrapped rows are full width.
+fn mark_soft_wraps(lines: &mut [Line], logical: &[Vec<char>]) -> bool {
     let mut end = lines.len();
     for want in logical.iter().rev() {
         if end == 0 {
@@ -303,11 +305,14 @@ fn mark_soft_wraps(lines: &mut [Line], unwrapped: &str) -> bool {
 
 /// Concatenated chars of `rows` with trailing whitespace removed.
 fn joined_trimmed(rows: &[Line]) -> Vec<char> {
-    let mut out: Vec<char> = rows.iter().flat_map(|l| l.chars.iter().copied()).collect();
-    while out.last().is_some_and(|c| c.is_whitespace()) {
-        out.pop();
+    trimmed_end(rows.iter().flat_map(|l| l.chars.iter().copied()).collect())
+}
+
+fn trimmed_end(mut chars: Vec<char>) -> Vec<char> {
+    while chars.last().is_some_and(|c| c.is_whitespace()) {
+        chars.pop();
     }
-    out
+    chars
 }
 
 #[cfg(test)]
@@ -351,6 +356,20 @@ mod tests {
             b.slice_inclusive(Pos { row: 0, col: 2 }, Pos { row: 1, col: 1 }),
             "cdef"
         );
+        assert_eq!(b.text(), "abcdefgh\nok\n");
+    }
+
+    #[test]
+    fn from_reads_strips_styles_from_the_unwrapped_read() {
+        // recent-unwrapped is read as ANSI too (text-format reads stall
+        // on idle TUI-agent panes); its SGR must not disturb alignment.
+        let unwrapped = "\x1b[31mabcd\x1b[0mefgh\nok";
+        let wrapped = "\x1b[31mabcd\x1b[0m\nefgh\nok";
+        let b = Buffer::from_reads(unwrapped, wrapped);
+        assert!(b.lines[0].soft_wrap);
+        assert!(!b.lines[1].soft_wrap);
+        assert!(!b.lines[2].soft_wrap);
+        assert_eq!(b.lines[0].style_at(0).fg, ansi::Color::Indexed(1));
         assert_eq!(b.text(), "abcdefgh\nok\n");
     }
 
